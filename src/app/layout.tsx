@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TopUpSend | Send Mobile Top-Ups Worldwide",
+  title: "TopUpSend | Top Up Send Worldwide",
   description:
     "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
   applicationName: "TopUpSend",
@@ -31,13 +31,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "TopUpSend",
-    title: "TopUpSend | Send Mobile Top-Ups Worldwide",
+    title: "TopUpSend | Top Up Send Worldwide",
     description:
       "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
   },
   twitter: {
     card: "summary",
-    title: "TopUpSend | Send Mobile Top-Ups Worldwide",
+    title: "TopUpSend | Top Up Send Worldwide",
     description:
       "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
   },
