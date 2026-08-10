@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
   Badge,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { Loader2, Wallet, Send, History, AlertCircle } from "lucide-react";
 
 interface CustomerData {

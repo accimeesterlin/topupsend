@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { StorefrontSettings, Organization } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { StorefrontSettings, Organization } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
           enabled: false,
         },
         branding: {
-          businessName: org?.name || "PG Prepaid Minutes",
+          businessName: org?.name || "TopUpSend",
           primaryColor: "#3b82f6",
         },
         paymentMethods: {

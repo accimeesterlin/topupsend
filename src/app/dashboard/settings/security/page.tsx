@@ -8,10 +8,10 @@ import {
   CardHeader,
   CardTitle,
   Button,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Shield, Mail, Check, X } from "lucide-react";
-import { toast } from "@pg-prepaid/ui";
+import { toast } from "@topupsend/ui";
 
 export default function SecuritySettingsPage() {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);

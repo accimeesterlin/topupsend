@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { XCircle, Loader2, AlertTriangle } from 'lucide-react';
-import { Button, Card, CardContent } from '@pg-prepaid/ui';
+import { Button, Card, CardContent } from '@topupsend/ui';
 
 function PaymentCancelContent() {
   const searchParams = useSearchParams();

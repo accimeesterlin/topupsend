@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Search, Phone, DollarSign, Zap, Shield, SlidersHorizontal, CreditCard, CheckCircle, XCircle, Wifi, Banknote, AlertCircle, Beaker, LogIn } from 'lucide-react';
 import Link from 'next/link';
-import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast } from '@pg-prepaid/ui';
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast } from '@topupsend/ui';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 

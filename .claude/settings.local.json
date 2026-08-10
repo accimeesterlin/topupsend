@@ -55,7 +55,7 @@
       "Bash(do echo \"Checking $file...\")",
       "Bash(done)",
       "Bash(do python3 -m json.tool \"$file\")",
-      "Bash(yarn workspace @pg-prepaid/ui add:*)",
+      "Bash(yarn workspace @topupsend/ui add:*)",
       "Bash(npm uninstall:*)",
       "Bash(claude:*)",
       "Bash(for f in /Users/esterlingaccime/Desktop/projects/learning/app/pg-prepaid-minutes/src/lib/i18n/translations/*.json)",

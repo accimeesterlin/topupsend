@@ -1,4 +1,4 @@
-import { dbConnection } from '@pg-prepaid/db/connection';
+import { dbConnection } from '@topupsend/db/connection';
 import { createSuccessResponse } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
 

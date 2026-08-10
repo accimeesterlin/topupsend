@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { UserRole } from '@pg-prepaid/types';
+import { UserRole } from '@topupsend/types';
 import { DollarSign, RotateCcw } from 'lucide-react';
-import { toast } from '@pg-prepaid/ui';
+import { toast } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 
 interface Member {

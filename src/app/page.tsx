@@ -617,7 +617,7 @@ export default function Home() {
                 <div className="w-7 h-7 rounded-lg bg-gray-900 flex items-center justify-center">
                   <Zap className="h-3.5 w-3.5 text-white" />
                 </div>
-                <span className="font-bold text-gray-900">PG Prepaid</span>
+                <span className="font-bold text-gray-900">TopUpSend</span>
               </div>
               <p className="text-xs text-gray-400 leading-relaxed max-w-xs">
                 {t("homepage.footer.brandDesc")}

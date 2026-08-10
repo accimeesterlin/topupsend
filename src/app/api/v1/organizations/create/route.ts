@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/auth-middleware';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Org, UserOrganization, Organization } from '@pg-prepaid/db';
-import { UserRole } from '@pg-prepaid/types';
+import { dbConnection } from '@topupsend/db/connection';
+import { Org, UserOrganization, Organization } from '@topupsend/db';
+import { UserRole } from '@topupsend/types';
 import { createToken, createSessionCookie } from '@/lib/auth';
 import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { createSuccessResponse } from '@/lib/api-response';

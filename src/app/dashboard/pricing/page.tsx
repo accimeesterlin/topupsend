@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DollarSign, Plus, Edit, Trash2, Save, ChevronUp, ChevronDown, Info } from 'lucide-react';
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@pg-prepaid/ui';
+import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { cn } from '@/lib/utils';
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
-import { dbConnection } from "@pg-prepaid/db/connection";
+import { dbConnection } from "@topupsend/db/connection";
 import {
   Customer,
   Transaction,
@@ -9,7 +9,7 @@ import {
   CustomerGroup,
   WebhookLog,
   ApiKey,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 

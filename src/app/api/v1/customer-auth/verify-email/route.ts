@@ -5,8 +5,8 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { Org } from "@pg-prepaid/db";
-import { dbConnection } from "@pg-prepaid/db/connection";
+import { Org } from "@topupsend/db";
+import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { emailVerificationService } from "@/lib/services/email-verification.service";

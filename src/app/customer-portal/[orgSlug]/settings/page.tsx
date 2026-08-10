@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
-import { Button } from "@pg-prepaid/ui";
-import { Input } from "@pg-prepaid/ui";
-import { Label } from "@pg-prepaid/ui";
-import { Alert, AlertDescription } from "@pg-prepaid/ui";
+import { Button } from "@topupsend/ui";
+import { Input } from "@topupsend/ui";
+import { Label } from "@topupsend/ui";
+import { Alert, AlertDescription } from "@topupsend/ui";
 
 interface CustomerData {
   _id?: string;

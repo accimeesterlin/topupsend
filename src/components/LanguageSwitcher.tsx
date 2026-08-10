@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Globe, Check, ChevronDown } from 'lucide-react';
 import { useLanguage, languages, Language } from '@/lib/i18n/LanguageContext';
-import { Button } from '@pg-prepaid/ui';
+import { Button } from '@topupsend/ui';
 
 export function LanguageSwitcher() {
   const { language, setLanguage } = useLanguage();

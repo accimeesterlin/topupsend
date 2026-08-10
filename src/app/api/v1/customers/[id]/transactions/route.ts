@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { Transaction } from "@pg-prepaid/db";
-import { dbConnection } from "@pg-prepaid/db/connection";
+import { Transaction } from "@topupsend/db";
+import { dbConnection } from "@topupsend/db/connection";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { requireCustomerAuthOrApiKey } from "@/lib/auth-middleware";

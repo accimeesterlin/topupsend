@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { Organization, Transaction, UserOrganization, dbConnection } from "@pg-prepaid/db";
+import { Organization, Transaction, UserOrganization, dbConnection } from "@topupsend/db";
 import {
   checkLimit,
   isApproachingLimit,

@@ -7,14 +7,14 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { Customer, CustomerBalanceHistory } from "@pg-prepaid/db";
+import { Customer, CustomerBalanceHistory } from "@topupsend/db";
 import { ApiErrors } from "@/lib/api-error";
 import {
   createSuccessResponse,
   createCreatedResponse,
 } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-middleware";
-import { Permission } from "@pg-prepaid/types";
+import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 import { emailVerificationService } from "@/lib/services/email-verification.service";
 
@@ -125,7 +125,7 @@ export async function POST(
       process.env.NEXT_PUBLIC_APP_URL ||
       `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     // Get org slug - we'll need to find the org
-    const { Org } = await import("@pg-prepaid/db");
+    const { Org } = await import("@topupsend/db");
     const org = await Org.findById(customer.orgId);
 
     if (org) {

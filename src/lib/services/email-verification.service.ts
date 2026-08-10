@@ -4,7 +4,7 @@
  */
 
 import crypto from "crypto";
-import { Customer, type ICustomer } from "@pg-prepaid/db";
+import { Customer, type ICustomer } from "@topupsend/db";
 import { sendEmail } from "./email.service";
 
 export interface VerificationTokenData {

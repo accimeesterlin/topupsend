@@ -69,3 +69,10 @@ export {
   type IInvoiceLineItem,
   InvoiceStatus,
 } from "./models/Invoice";
+export {
+  ScheduledTopup,
+  type IScheduledTopup,
+  type RecurrenceConfig,
+  type NotificationConfig,
+  type ProductSnapshot,
+} from "./models/ScheduledTopup";

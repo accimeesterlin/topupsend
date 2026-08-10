@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Organization } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Organization } from "@topupsend/db";
 
 // Mock audit logs for now - you can replace this with actual database queries
 const generateMockAuditLogs = (_orgId: string) => {

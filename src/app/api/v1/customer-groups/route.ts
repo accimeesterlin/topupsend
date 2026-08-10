@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { CustomerGroup } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { CustomerGroup } from "@topupsend/db";
 
 // GET all customer groups
 export async function GET(_request: NextRequest) {

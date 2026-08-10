@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Transaction } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Transaction } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
 

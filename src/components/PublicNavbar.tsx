@@ -17,7 +17,7 @@ export function PublicNavbar() {
             <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
               <Zap className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-gray-900">PG Prepaid</span>
+            <span className="text-lg font-bold text-gray-900">TopUpSend</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-8">

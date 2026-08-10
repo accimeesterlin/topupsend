@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { PaymentProvider } from '@pg-prepaid/types';
+import { PaymentProvider } from '@topupsend/types';
 
 export interface IOrg extends Document {
   name: string;

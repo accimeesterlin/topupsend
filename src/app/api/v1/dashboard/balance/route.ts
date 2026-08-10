@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Integration } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Integration } from "@topupsend/db";
 import { DingConnectService } from "@/lib/services/dingconnect.service";
 import { ReloadlyService } from "@/lib/services/reloadly.service";
 import { logger } from "@/lib/logger";

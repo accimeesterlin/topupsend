@@ -16,30 +16,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mobile Top-Up | Prepaid Minutes Platform",
+  title: "TopUpSend | Send Mobile Top-Ups Worldwide",
   description:
-    "Send mobile top-ups worldwide instantly. Fast, secure, and reliable prepaid mobile recharge service.",
-  applicationName: "Mobile Top-Up",
+    "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
+  applicationName: "TopUpSend",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Mobile Top-Up",
+    title: "TopUpSend",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
     type: "website",
-    siteName: "Mobile Top-Up",
-    title: "Mobile Top-Up | Prepaid Minutes Platform",
+    siteName: "TopUpSend",
+    title: "TopUpSend | Send Mobile Top-Ups Worldwide",
     description:
-      "Send mobile top-ups worldwide instantly. Fast, secure, and reliable prepaid mobile recharge service.",
+      "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
   },
   twitter: {
     card: "summary",
-    title: "Mobile Top-Up | Prepaid Minutes Platform",
+    title: "TopUpSend | Send Mobile Top-Ups Worldwide",
     description:
-      "Send mobile top-ups worldwide instantly. Fast, secure, and reliable prepaid mobile recharge service.",
+      "Send mobile top-ups worldwide instantly with TopUpSend. Fast, secure, and reliable prepaid mobile recharge service for your customers.",
   },
 };
 

@@ -14,7 +14,7 @@ import {
   Integration,
   PricingRule,
   StorefrontSettings,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { requireVerifiedCustomer } from "@/lib/auth-middleware";

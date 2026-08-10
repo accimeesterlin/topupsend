@@ -10,7 +10,7 @@ import {
   Organization,
   type ICustomer,
   type ITransaction,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { logger } from "@/lib/logger";
 import { EmailService } from "@/lib/services/email.service";
 

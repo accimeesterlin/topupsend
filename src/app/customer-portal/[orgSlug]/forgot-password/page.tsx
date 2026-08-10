@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
-import { Button, Input, Label, Alert, AlertDescription } from "@pg-prepaid/ui";
+import { Button, Input, Label, Alert, AlertDescription } from "@topupsend/ui";
 
 export default function ForgotPasswordPage({
   params,

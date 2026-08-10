@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Integration } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Integration } from "@topupsend/db";
 import { createSuccessResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { DingConnectService } from "@/lib/services/dingconnect.service";

@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { BalanceHistory, UserOrganization } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { BalanceHistory, UserOrganization } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
 import { handleApiError } from '@/lib/api-error';
 import { requireAuth } from '@/lib/auth-middleware';
-import { UserRole } from '@pg-prepaid/types';
+import { UserRole } from '@topupsend/types';
 
 /**
  * GET /api/v1/organizations/members/[id]/balance/history

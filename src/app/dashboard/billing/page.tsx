@@ -23,7 +23,7 @@ import {
 import Link from "next/link";
 import { getTierInfo, getNextTier, SubscriptionTier } from "@/lib/pricing";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { toast } from "@pg-prepaid/ui";
+import { toast } from "@topupsend/ui";
 import type { SubscriptionData } from "@/types/subscription";
 import { SubscriptionUpgradePreview } from "@/components/SubscriptionUpgradePreview";
 

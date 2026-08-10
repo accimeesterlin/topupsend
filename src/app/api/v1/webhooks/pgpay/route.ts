@@ -7,7 +7,7 @@ import {
   StorefrontSettings,
   PaymentProvider,
   Customer,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 import { createPGPayService } from "@/lib/services/pgpay.service";
 import { logger } from "@/lib/logger";
@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
         } else {
           // Fall back to Product database lookup
           try {
-            const Product = (await import("@pg-prepaid/db")).Product;
+            const Product = (await import("@topupsend/db")).Product;
             const product = await Product.findOne({
               $or: [
                 { skuCode: productSkuCode },

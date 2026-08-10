@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Globe, Save, Search, Filter } from 'lucide-react';
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast } from '@pg-prepaid/ui';
+import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { cn } from '@/lib/utils';
 

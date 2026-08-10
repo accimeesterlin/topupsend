@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@pg-prepaid/ui';
+} from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { cn } from '@/lib/utils';
 

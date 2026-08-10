@@ -10,7 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardDescription } from "@pg-prepaid/ui";
+import { Card, CardHeader, CardTitle, CardDescription } from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { cn } from "@/lib/utils";
 

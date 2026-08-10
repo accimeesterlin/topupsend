@@ -11,7 +11,7 @@ export default withSentryConfig(nextConfig, {
 
   org: "pgecom",
 
-  project: "prepaid-minutes",
+  project: "topupsend",
   sentryUrl: "https://log.pgecom.com/",
 
   // Only print logs for uploading source maps in CI

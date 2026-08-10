@@ -3,8 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Input, Label, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Alert, AlertDescription } from '@pg-prepaid/ui';
-import { toast } from '@pg-prepaid/ui';
+import { Button, Input, Label, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Alert, AlertDescription } from '@topupsend/ui';
+import { toast } from '@topupsend/ui';
 
 function ResetPasswordForm() {
   const router = useRouter();

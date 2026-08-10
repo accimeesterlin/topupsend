@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { dbConnection, Transaction, Customer } from "@pg-prepaid/db";
+import { dbConnection, Transaction, Customer } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { logger } from "@/lib/logger";
 import countries from "i18n-iso-countries";

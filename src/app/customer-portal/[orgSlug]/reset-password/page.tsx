@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
-import { Button, Input, Label, Alert, AlertDescription } from "@pg-prepaid/ui";
+import { Button, Input, Label, Alert, AlertDescription } from "@topupsend/ui";
 
 export default function ResetPasswordPage({
   params,

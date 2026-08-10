@@ -16,9 +16,9 @@ const customJestConfig = {
   // Module name mapper for path aliases
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
-    '^@pg-prepaid/db$': '<rootDir>/packages/db/src/index.ts',
-    '^@pg-prepaid/types$': '<rootDir>/packages/types/src/index.ts',
-    '^@pg-prepaid/ui$': '<rootDir>/packages/ui/src/index.ts',
+    '^@topupsend/db$': '<rootDir>/packages/db/src/index.ts',
+    '^@topupsend/types$': '<rootDir>/packages/types/src/index.ts',
+    '^@topupsend/ui$': '<rootDir>/packages/ui/src/index.ts',
   },
 
   // Coverage configuration

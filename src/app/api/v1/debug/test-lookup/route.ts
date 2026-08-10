@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Integration, StorefrontSettings, Org } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Integration, StorefrontSettings, Org } from '@topupsend/db';
 import { createSuccessResponse } from '@/lib/api-response';
 import { createDingConnectService } from '@/lib/services/dingconnect.service';
 

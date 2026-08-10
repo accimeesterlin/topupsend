@@ -1,5 +1,5 @@
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Integration } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Integration } from "@topupsend/db";
 import sgMail from "@sendgrid/mail";
 import Mailgun from "mailgun.js";
 import formData from "form-data";

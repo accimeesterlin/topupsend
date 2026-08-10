@@ -20,12 +20,12 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@pg-prepaid/db": ["./packages/db/src"],
-      "@pg-prepaid/db/*": ["./packages/db/src/*"],
-      "@pg-prepaid/types": ["./packages/types/src"],
-      "@pg-prepaid/types/*": ["./packages/types/src/*"],
-      "@pg-prepaid/ui": ["./packages/ui/src"],
-      "@pg-prepaid/ui/*": ["./packages/ui/src/*"]
+      "@topupsend/db": ["./packages/db/src"],
+      "@topupsend/db/*": ["./packages/db/src/*"],
+      "@topupsend/types": ["./packages/types/src"],
+      "@topupsend/types/*": ["./packages/types/src/*"],
+      "@topupsend/ui": ["./packages/ui/src"],
+      "@topupsend/ui/*": ["./packages/ui/src/*"]
     }
   },
   "include": [

@@ -2,8 +2,8 @@ import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth-middleware';
 import { createSuccessResponse } from '@/lib/api-response';
 import { handleApiError } from '@/lib/api-error';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { UserOrganization, User } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { UserOrganization, User } from '@topupsend/db';
 
 export async function GET(request: NextRequest) {
   try {

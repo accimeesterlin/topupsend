@@ -1,4 +1,4 @@
-import { UserRole, Permission } from "@pg-prepaid/types";
+import { UserRole, Permission } from "@topupsend/types";
 
 /**
  * Role-based permission mapping

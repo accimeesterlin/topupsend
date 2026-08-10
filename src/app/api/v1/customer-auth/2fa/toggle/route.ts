@@ -5,8 +5,8 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { Customer } from "@pg-prepaid/db";
-import { dbConnection } from "@pg-prepaid/db/connection";
+import { Customer } from "@topupsend/db";
+import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { getCustomerSession } from "@/lib/customer-auth";

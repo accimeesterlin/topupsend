@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { Transaction } from "@pg-prepaid/db";
+import { Transaction } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {

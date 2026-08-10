@@ -7,7 +7,7 @@ import {
   WebhookLog,
   type WebhookSource,
   type IWebhookLog,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 
 export class WebhookLoggingService {
   /**

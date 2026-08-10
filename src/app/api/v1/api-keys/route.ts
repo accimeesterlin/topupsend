@@ -6,14 +6,14 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ApiKey, type ApiKeyScope } from "@pg-prepaid/db";
+import { ApiKey, type ApiKeyScope } from "@topupsend/db";
 import { ApiErrors } from "@/lib/api-error";
 import {
   createSuccessResponse,
   createCreatedResponse,
 } from "@/lib/api-response";
 import { requireAuth, requireCustomerAuth } from "@/lib/auth-middleware";
-import { Permission } from "@pg-prepaid/types";
+import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 
 /**

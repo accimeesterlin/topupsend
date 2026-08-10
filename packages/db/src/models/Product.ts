@@ -63,6 +63,20 @@ export interface IProduct extends Document {
   };
   createdAt: Date;
   updatedAt: Date;
+
+  // Computed properties for backward compatibility
+  readonly isVariableValue: boolean;
+  readonly minAmount: number | undefined;
+  readonly maxAmount: number | undefined;
+  readonly skuCode: string;
+  readonly providerCode: string;
+  readonly benefitType: string;
+  readonly isActive: boolean;
+
+  // Methods
+  getEffectivePrice(countryCode?: string): number;
+  isAvailableInCountry(countryCode: string): boolean;
+  validateQuantity(quantity: number): { valid: boolean; error?: string };
 }
 
 const ProductSchema = new Schema<IProduct>(
@@ -234,6 +248,35 @@ ProductSchema.pre('save', function (next) {
   // Calculate profit margin
   this.pricing.profitMargin = ((this.pricing.sellPrice - this.pricing.costPrice) / this.pricing.costPrice) * 100;
   next();
+});
+
+// Virtual properties for backward compatibility
+ProductSchema.virtual('isVariableValue').get(function () {
+  return this.denomination.type === 'range';
+});
+
+ProductSchema.virtual('minAmount').get(function () {
+  return this.denomination.minAmount;
+});
+
+ProductSchema.virtual('maxAmount').get(function () {
+  return this.denomination.maxAmount;
+});
+
+ProductSchema.virtual('skuCode').get(function () {
+  return this.providerProductId;
+});
+
+ProductSchema.virtual('providerCode').get(function () {
+  return this.provider;
+});
+
+ProductSchema.virtual('benefitType').get(function () {
+  return this.denomination.unit.toLowerCase();
+});
+
+ProductSchema.virtual('isActive').get(function () {
+  return this.status === 'active';
 });
 
 // Methods

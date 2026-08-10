@@ -7,13 +7,13 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ApiKey } from "@pg-prepaid/db";
+import { ApiKey } from "@topupsend/db";
 import { ApiErrors } from "@/lib/api-error";
 import {
   createSuccessResponse,
 } from "@/lib/api-response";
 import { requireAuth, requireCustomerAuth } from "@/lib/auth-middleware";
-import { Permission } from "@pg-prepaid/types";
+import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 
 /**

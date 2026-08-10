@@ -7,7 +7,7 @@ import {
   clearSessionCookie,
   type SessionPayload,
 } from '../auth';
-import { UserRole } from '@pg-prepaid/types';
+import { UserRole } from '@topupsend/types';
 
 describe('Password Hashing', () => {
   describe('hashPassword', () => {

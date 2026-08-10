@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { UserRole } from '@pg-prepaid/types';
+import { UserRole } from '@topupsend/types';
 
 export interface IUser extends Document {
   email: string;

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireCustomerAuth } from "@/lib/auth-middleware";
-import { Customer } from "@pg-prepaid/db";
+import { Customer } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { z } from "zod";
 

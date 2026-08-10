@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { UserPlus, Mail, Shield, Eye, Trash2, Edit2, Users as UsersIcon, Crown, AlertCircle, Settings, BarChart3, Store, DollarSign, Tag, Globe, ShoppingCart, CreditCard, Plug, Wallet, Copy, Search } from 'lucide-react';
-import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast } from '@pg-prepaid/ui';
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 
 // Permission categories with descriptions

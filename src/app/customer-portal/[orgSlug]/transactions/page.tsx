@@ -19,7 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 
 interface Transaction {
   _id: string;

@@ -5,7 +5,7 @@
  * Updates both Organization.usage and Subscription.usageThisMonth counters.
  */
 
-import { Organization, Subscription } from "@pg-prepaid/db";
+import { Organization, Subscription } from "@topupsend/db";
 import {
   checkLimit,
   SubscriptionTier,

@@ -3,7 +3,7 @@ import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 import {
   dbConnection,
   Transaction,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { logger } from "@/lib/logger";
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { Toaster, useToast } from '@pg-prepaid/ui';
+import { Toaster, useToast } from '@topupsend/ui';
 
 export function ToastProvider() {
   const { toasts } = useToast();

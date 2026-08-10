@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Discount } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Discount } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
 import { handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find the organization (check both legacy Org and new Organization models)
-    const { Organization, Org } = await import('@pg-prepaid/db');
+    const { Organization, Org } = await import('@topupsend/db');
 
     logger.info('Looking up organization', { orgSlug });
 

@@ -7,8 +7,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@pg-prepaid/ui";
-import { Button, Input, Alert, AlertDescription } from "@pg-prepaid/ui";
+} from "@topupsend/ui";
+import { Button, Input, Alert, AlertDescription } from "@topupsend/ui";
 import { Loader2 } from "lucide-react";
 
 interface TwoFactorModalProps {

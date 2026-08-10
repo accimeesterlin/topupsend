@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
-import { UserRole, Permission } from "@pg-prepaid/types";
+import { UserRole, Permission } from "@topupsend/types";
 
 export interface IUserOrganization extends Document {
   userId: mongoose.Types.ObjectId;

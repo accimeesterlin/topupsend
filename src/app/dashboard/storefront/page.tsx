@@ -18,7 +18,7 @@ import {
   CardDescription,
   CardContent,
   toast,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 
 export default function StorefrontPage() {

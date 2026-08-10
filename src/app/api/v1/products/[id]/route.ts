@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Product } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Product } from '@topupsend/db';
 
 // GET single product
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

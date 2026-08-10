@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Transaction, Integration, Customer, StorefrontSettings } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Transaction, Integration, Customer, StorefrontSettings } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
-import { Permission } from "@pg-prepaid/types";
+import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 import { retryTransactionSchema } from "@/lib/validations/retry-transaction";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";

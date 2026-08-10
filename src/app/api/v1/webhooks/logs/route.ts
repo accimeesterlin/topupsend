@@ -7,10 +7,10 @@ import { NextRequest } from "next/server";
 import { ApiErrors } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-middleware";
-import { Permission } from "@pg-prepaid/types";
+import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 import { webhookLoggingService } from "@/lib/services/webhook-logging.service";
-import { type WebhookSource } from "@pg-prepaid/db";
+import { type WebhookSource } from "@topupsend/db";
 
 /**
  * GET - List webhook logs

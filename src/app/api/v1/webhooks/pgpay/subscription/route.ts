@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { dbConnection, Organization } from "@pg-prepaid/db";
+import { dbConnection, Organization } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { PGPayService } from "@/lib/services/pgpay.service";
 import { SubscriptionTier } from "@/lib/pricing";

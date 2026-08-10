@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Check, ChevronsUpDown, PlusCircle, Building2, Settings2 } from 'lucide-react';
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Input, Label, toast } from '@pg-prepaid/ui';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Input, Label, toast } from '@topupsend/ui';
 import { cn } from '@/lib/utils';
 
 interface Organization {

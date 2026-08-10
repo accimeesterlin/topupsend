@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { getSession, SessionPayload } from "./auth";
 import { ApiErrors } from "./api-error";
-import { UserRole } from "@pg-prepaid/types";
+import { UserRole } from "@topupsend/types";
 import {
   ApiKey,
   Customer,
   type ApiKeyScope,
   type IApiKey,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { rateLimitService } from "./services/rate-limit.service";
 import { getCustomerSession } from "./customer-auth";
 import crypto from "crypto";

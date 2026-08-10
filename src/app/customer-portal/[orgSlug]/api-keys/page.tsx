@@ -23,7 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 
 interface ApiKey {
   id: string;

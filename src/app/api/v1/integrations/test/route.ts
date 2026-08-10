@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Integration } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Integration } from '@topupsend/db';
 import sgMail from '@sendgrid/mail';
 import Mailgun from 'mailgun.js';
 import formData from 'form-data';
@@ -195,7 +195,7 @@ async function testZeptoMail(credentials: any, testEmail?: string) {
             <body style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #667eea;">Test Email Successful!</h2>
               <p>Your ZeptoMail integration is working correctly.</p>
-              <p>This is a test email sent from PG Prepaid Minutes platform.</p>
+              <p>This is a test email sent from TopUpSend platform.</p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
               <p style="color: #6b7280; font-size: 12px;">
                 Sent at: ${new Date().toISOString()}
@@ -203,7 +203,7 @@ async function testZeptoMail(credentials: any, testEmail?: string) {
             </body>
           </html>
         `,
-        textbody: `Test Email Successful!\n\nYour ZeptoMail integration is working correctly.\n\nThis is a test email sent from PG Prepaid Minutes platform.\n\nSent at: ${new Date().toISOString()}`,
+        textbody: `Test Email Successful!\n\nYour ZeptoMail integration is working correctly.\n\nThis is a test email sent from TopUpSend platform.\n\nSent at: ${new Date().toISOString()}`,
       });
 
       console.log('ZeptoMail response:', response);
@@ -243,13 +243,13 @@ async function testMailgun(credentials: any, testEmail?: string) {
         from: `${credentials.fromName || 'Test Email'} <${credentials.fromEmail}>`,
         to: testEmail,
         subject: 'Mailgun Integration Test',
-        text: `Test Email Successful!\n\nYour Mailgun integration is working correctly.\n\nThis is a test email sent from PG Prepaid Minutes platform.\n\nSent at: ${new Date().toISOString()}`,
+        text: `Test Email Successful!\n\nYour Mailgun integration is working correctly.\n\nThis is a test email sent from TopUpSend platform.\n\nSent at: ${new Date().toISOString()}`,
         html: `
           <html>
             <body style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #667eea;">Test Email Successful!</h2>
               <p>Your Mailgun integration is working correctly.</p>
-              <p>This is a test email sent from PG Prepaid Minutes platform.</p>
+              <p>This is a test email sent from TopUpSend platform.</p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
               <p style="color: #6b7280; font-size: 12px;">
                 Sent at: ${new Date().toISOString()}
@@ -296,13 +296,13 @@ async function testSendGrid(credentials: any, testEmail?: string) {
           name: credentials.fromName || 'Test Email',
         },
         subject: 'SendGrid Integration Test',
-        text: `Test Email Successful!\n\nYour SendGrid integration is working correctly.\n\nThis is a test email sent from PG Prepaid Minutes platform.\n\nSent at: ${new Date().toISOString()}`,
+        text: `Test Email Successful!\n\nYour SendGrid integration is working correctly.\n\nThis is a test email sent from TopUpSend platform.\n\nSent at: ${new Date().toISOString()}`,
         html: `
           <html>
             <body style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #667eea;">Test Email Successful!</h2>
               <p>Your SendGrid integration is working correctly.</p>
-              <p>This is a test email sent from PG Prepaid Minutes platform.</p>
+              <p>This is a test email sent from TopUpSend platform.</p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
               <p style="color: #6b7280; font-size: 12px;">
                 Sent at: ${new Date().toISOString()}
@@ -357,13 +357,13 @@ async function testMailchimp(credentials: any, testEmail?: string) {
           from_name: credentials.fromName || 'Test Email',
           to: [{ email: testEmail }],
           subject: 'Mailchimp Integration Test',
-          text: `Test Email Successful!\n\nYour Mailchimp integration is working correctly.\n\nThis is a test email sent from PG Prepaid Minutes platform.\n\nSent at: ${new Date().toISOString()}`,
+          text: `Test Email Successful!\n\nYour Mailchimp integration is working correctly.\n\nThis is a test email sent from TopUpSend platform.\n\nSent at: ${new Date().toISOString()}`,
           html: `
             <html>
               <body style="font-family: Arial, sans-serif; padding: 20px;">
                 <h2 style="color: #667eea;">Test Email Successful!</h2>
                 <p>Your Mailchimp integration is working correctly.</p>
-                <p>This is a test email sent from PG Prepaid Minutes platform.</p>
+                <p>This is a test email sent from TopUpSend platform.</p>
                 <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
                 <p style="color: #6b7280; font-size: 12px;">
                   Sent at: ${new Date().toISOString()}
@@ -413,7 +413,7 @@ async function testZapier(credentials: any) {
     },
     body: JSON.stringify({
       test: true,
-      message: 'Test webhook from PG Prepaid Minutes',
+      message: 'Test webhook from TopUpSend',
       timestamp: new Date().toISOString(),
     }),
   });

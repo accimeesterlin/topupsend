@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Org, Organization, UserOrganization } from "@pg-prepaid/db";
-import { UserRole } from "@pg-prepaid/types";
+import { dbConnection } from "@topupsend/db/connection";
+import { Org, Organization, UserOrganization } from "@topupsend/db";
+import { UserRole } from "@topupsend/types";
 import { createSuccessResponse } from "@/lib/api-response";
 import { handleApiError, ApiErrors } from "@/lib/api-error";
 import { logger } from "@/lib/logger";

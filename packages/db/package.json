@@ -1,5 +1,5 @@
 {
-  "name": "@pg-prepaid/db",
+  "name": "@topupsend/db",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "mongoose": "^8.1.0",
-    "@pg-prepaid/types": "*"
+    "@topupsend/types": "*"
   },
   "devDependencies": {
     "typescript": "^5",

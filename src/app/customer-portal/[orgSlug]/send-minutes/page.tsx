@@ -21,7 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import {
   Loader2,
   AlertCircle,

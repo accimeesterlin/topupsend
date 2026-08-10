@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { User } from "@pg-prepaid/db/models/user.model";
-import { Org } from "@pg-prepaid/db/models/org.model";
-import { UserOrganization } from "@pg-prepaid/db";
-import { UserRole } from "@pg-prepaid/types";
+import { dbConnection } from "@topupsend/db/connection";
+import { User } from "@topupsend/db/models/user.model";
+import { Org } from "@topupsend/db/models/org.model";
+import { UserOrganization } from "@topupsend/db";
+import { UserRole } from "@topupsend/types";
 import { hashPassword, createToken, createSessionCookie } from "@/lib/auth";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";

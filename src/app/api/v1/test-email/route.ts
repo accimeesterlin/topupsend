@@ -43,13 +43,13 @@ export async function POST(request: NextRequest) {
   <h2>Test Email</h2>
   <p>${message}</p>
   <p style="color: #666; font-size: 12px; margin-top: 30px;">
-    This is a test email sent from PG Prepaid Minutes platform.
+    This is a test email sent from TopUpSend platform.
   </p>
 </body>
 </html>
     `;
 
-    const text = `Test Email\n\n${message}\n\nThis is a test email sent from PG Prepaid Minutes platform.`;
+    const text = `Test Email\n\n${message}\n\nThis is a test email sent from TopUpSend platform.`;
 
     try {
       await EmailService.sendEmail(session.orgId, {

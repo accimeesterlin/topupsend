@@ -61,7 +61,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 

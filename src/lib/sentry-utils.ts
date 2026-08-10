@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import type { SessionPayload } from "./auth";
-import type { UserRole } from "@pg-prepaid/types";
+import type { UserRole } from "@topupsend/types";
 
 /**
  * User context for Sentry - contains only non-PII data

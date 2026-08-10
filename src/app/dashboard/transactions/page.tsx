@@ -36,11 +36,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { format } from "date-fns";
-import { TransactionStatus } from "@pg-prepaid/types";
+import { TransactionStatus } from "@topupsend/types";
 
 interface Transaction {
   _id: string;

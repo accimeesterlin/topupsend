@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
-import { Organization, dbConnection } from "@pg-prepaid/db";
+import { Organization, dbConnection } from "@topupsend/db";
 import { getTierInfo, checkLimit, SubscriptionTier } from "@/lib/pricing";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 

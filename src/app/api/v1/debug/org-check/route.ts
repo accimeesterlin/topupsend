@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Org, StorefrontSettings, Integration } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { Org, StorefrontSettings, Integration } from '@topupsend/db';
 import { createSuccessResponse } from '@/lib/api-response';
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Button } from "@pg-prepaid/ui";
+import { Button } from "@topupsend/ui";
 import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { sanitizePhoneForWhatsApp } from "@/lib/utils";
 

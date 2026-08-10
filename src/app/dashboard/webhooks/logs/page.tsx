@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import {
   RefreshCw,
   Filter,

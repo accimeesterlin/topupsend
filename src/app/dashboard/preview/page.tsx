@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Smartphone, Search } from 'lucide-react';
-import { Button, Card, CardContent } from '@pg-prepaid/ui';
+import { Button, Card, CardContent } from '@topupsend/ui';
 import Link from 'next/link';
 
 export default function StorefrontPreviewPage() {
@@ -135,7 +135,7 @@ export default function StorefrontPreviewPage() {
             <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <ArrowLeft className="h-5 w-5 text-muted-foreground" />
               <div>
-                <h1 className="text-lg font-bold">{orgName || 'PG Prepaid Minutes'}</h1>
+                <h1 className="text-lg font-bold">{orgName || 'TopUpSend'}</h1>
                 <p className="text-xs text-muted-foreground">Preview Mode</p>
               </div>
             </Link>

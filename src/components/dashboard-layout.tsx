@@ -24,7 +24,7 @@ import {
   User,
   Shield,
 } from "lucide-react";
-import { Button } from "@pg-prepaid/ui";
+import { Button } from "@topupsend/ui";
 import { cn } from "@/lib/utils";
 import { OrganizationSwitcher } from "./organization-switcher";
 
@@ -155,7 +155,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <CreditCard className="h-5 w-5 text-primary-foreground" />
             </div>
             <div className="flex-1">
-              <h1 className="text-sm font-bold">PG Prepaid Minutes</h1>
+              <h1 className="text-sm font-bold">TopUpSend</h1>
               <p className="text-xs text-muted-foreground">Seller Platform</p>
             </div>
             <Button

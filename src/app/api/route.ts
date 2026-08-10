@@ -2,7 +2,7 @@ import { createSuccessResponse } from '@/lib/api-response';
 
 export async function GET() {
   return createSuccessResponse({
-    name: 'PG Prepaid Minutes API',
+    name: 'TopUpSend API',
     version: '1.0.0',
     apiVersion: 'v1',
     endpoints: {

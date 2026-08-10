@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
   Badge,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import {
   Code,
   BookOpen,

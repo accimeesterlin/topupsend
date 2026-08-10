@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { User, Organization } from '@pg-prepaid/db';
+import { dbConnection } from '@topupsend/db/connection';
+import { User, Organization } from '@topupsend/db';
 import { createSuccessResponse } from '@/lib/api-response';
 import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';

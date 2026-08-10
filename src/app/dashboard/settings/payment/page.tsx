@@ -22,9 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { toast } from "@pg-prepaid/ui";
+import { toast } from "@topupsend/ui";
 
 interface PaymentProvider {
   _id: string;

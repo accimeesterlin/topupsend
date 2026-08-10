@@ -19,7 +19,7 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 
 const POPULAR_COUNTRIES = [

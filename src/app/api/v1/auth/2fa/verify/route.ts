@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { User } from "@pg-prepaid/db";
+import { User } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
-import { dbConnection } from "@pg-prepaid/db/connection";
+import { dbConnection } from "@topupsend/db/connection";
 import { createToken, createSessionCookie } from "@/lib/auth";
-import { UserRole } from "@pg-prepaid/types";
+import { UserRole } from "@topupsend/types";
 
 /**
  * POST /api/v1/auth/2fa/verify

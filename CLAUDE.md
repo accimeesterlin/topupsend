@@ -32,9 +32,9 @@ This is a Yarn workspaces monorepo with the following organization:
 apps/
   web/          # Main Next.js application (currently at root level)
 packages/
-  db/           # Database models and connection (@pg-prepaid/db)
-  types/        # Shared TypeScript types and enums (@pg-prepaid/types)
-  ui/           # Shared UI components (@pg-prepaid/ui)
+  db/           # Database models and connection (@topupsend/db)
+  types/        # Shared TypeScript types and enums (@topupsend/types)
+  ui/           # Shared UI components (@topupsend/ui)
 ```
 
 ### TypeScript Path Aliases
@@ -42,9 +42,9 @@ packages/
 Configured in root `tsconfig.json`:
 
 - `@/*` - Root src directory
-- `@pg-prepaid/db` - Database package
-- `@pg-prepaid/types` - Types package
-- `@pg-prepaid/ui` - UI components package
+- `@topupsend/db` - Database package
+- `@topupsend/types` - Types package
+- `@topupsend/ui` - UI components package
 
 ### Application Structure
 
@@ -164,7 +164,7 @@ See `.env.example` for all required environment variables:
 **Required:**
 
 - `MONGODB_URI` - MongoDB connection string
-- `MONGODB_DB_NAME` - Database name (default: pg-prepaid)
+- `MONGODB_DB_NAME` - Database name (default: topupsend)
 - `JWT_SECRET` - Secret for JWT signing
 - `JWT_EXPIRES_IN` - Token expiration (default: 7d)
 - `NODE_ENV` - development/production
@@ -182,7 +182,7 @@ See `.env.example` for all required environment variables:
 Database connection must be established before accessing models. The singleton pattern ensures only one connection:
 
 ```typescript
-import { dbConnection } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db";
 await dbConnection.connect();
 ```
 
@@ -202,10 +202,10 @@ await dbConnection.connect();
 
 ### Working with Types
 
-Import shared types from `@pg-prepaid/types`:
+Import shared types from `@topupsend/types`:
 
 ```typescript
-import { UserRole, TransactionStatus } from "@pg-prepaid/types";
+import { UserRole, TransactionStatus } from "@topupsend/types";
 ```
 
 ## Code Quality
@@ -800,7 +800,7 @@ The application uses a custom toast notification system for all user feedback:
 
 **Import:**
 ```typescript
-import { toast } from '@pg-prepaid/ui';
+import { toast } from '@topupsend/ui';
 ```
 
 **Usage:**

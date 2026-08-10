@@ -1,5 +1,5 @@
 {
-  "name": "pg-prepaid-minutes",
+  "name": "topupsend",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -34,6 +34,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.0.0",
+    "date-fns-tz": "^3.2.0",
     "human-names": "^1.0.12",
     "i18n-iso-countries": "^7.14.0",
     "jose": "^5.2.0",
@@ -41,6 +42,7 @@
     "mailgun.js": "^12.1.1",
     "mongoose": "^8.1.0",
     "next": "15.5.9",
+    "node-cron": "^4.6.0",
     "posthog-js": "^1.407.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -61,6 +63,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
+    "@types/node-cron": "^3.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^9.0.7",

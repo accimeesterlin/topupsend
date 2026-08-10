@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@pg-prepaid/ui";
+} from "@topupsend/ui";
 
 interface ApiKey {
   _id: string;

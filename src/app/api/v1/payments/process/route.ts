@@ -8,7 +8,7 @@ import {
   Integration,
   StorefrontSettings,
   PaymentProvider,
-} from "@pg-prepaid/db";
+} from "@topupsend/db";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 import { createPGPayService } from "@/lib/services/pgpay.service";
 import { logger } from "@/lib/logger";

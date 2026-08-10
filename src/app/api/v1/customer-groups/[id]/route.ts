@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { CustomerGroup, Customer } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { CustomerGroup, Customer } from "@topupsend/db";
 
 // PUT - Update customer group
 export async function PUT(

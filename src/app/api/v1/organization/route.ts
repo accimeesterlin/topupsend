@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { dbConnection } from '@pg-prepaid/db/connection';
-import { Org } from '@pg-prepaid/db/models/org.model';
+import { dbConnection } from '@topupsend/db/connection';
+import { Org } from '@topupsend/db/models/org.model';
 
 // GET organization details
 export async function GET(_request: NextRequest) {

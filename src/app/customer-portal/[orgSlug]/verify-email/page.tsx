@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
-import { toast, Button, Alert, AlertDescription } from "@pg-prepaid/ui";
+import { toast, Button, Alert, AlertDescription } from "@topupsend/ui";
 
 export default function VerifyEmailPage({
   params,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TransactionStatus } from '@pg-prepaid/types';
+import { TransactionStatus } from '@topupsend/types';
 
 /**
  * Validation schema for updating transaction status

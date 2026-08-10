@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbConnection } from "@pg-prepaid/db/connection";
-import { Customer } from "@pg-prepaid/db";
+import { dbConnection } from "@topupsend/db/connection";
+import { Customer } from "@topupsend/db";
 
 // POST - Toggle customer favorite status
 export async function POST(
