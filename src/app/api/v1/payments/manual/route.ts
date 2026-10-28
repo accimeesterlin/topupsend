@@ -3,8 +3,8 @@
  * POST /api/v1/payments/manual - Record a payment received offline
  * GET  /api/v1/payments/manual - List the org's manual payments
  *
- * Phase 3: payments can be applied to a customer's prepaid balance.
- * Applying a payment to an existing order arrives in Phase 4.
+ * A payment is applied either to a customer's prepaid balance or to an
+ * existing unpaid order (which is then fulfilled like an online payment).
  */
 
 import { NextRequest } from "next/server";
@@ -24,6 +24,7 @@ import { createManualPaymentSchema } from "@/lib/validations/manual-payment";
 import {
   listManualPayments,
   recordBalanceManualPayment,
+  recordOrderManualPayment,
 } from "@/lib/services/manual-payment.service";
 import type { IManualPayment } from "@topupsend/db";
 
@@ -87,10 +88,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (input.appliedTo === "order") {
-      // Order application (with fulfillment) is Phase 4 of the rollout.
-      throw ApiErrors.BadRequest(
-        "Applying a manual payment to an order is not available yet",
-      );
+      const { manualPayment, transaction, fulfillment } =
+        await recordOrderManualPayment({
+          orgId: session.orgId,
+          recordedBy: session.userId,
+          input,
+        });
+
+      return createCreatedResponse({
+        message:
+          fulfillment.outcome === "refund-error"
+            ? "Manual payment recorded. The top-up could not be delivered, so the amount was credited to the customer's balance."
+            : "Manual payment recorded",
+        manualPayment: serializeManualPayment(manualPayment),
+        transaction: {
+          id: transaction._id?.toString(),
+          orderId: transaction.orderId,
+          status: transaction.status,
+        },
+      });
     }
 
     const { manualPayment, customer } = await recordBalanceManualPayment({

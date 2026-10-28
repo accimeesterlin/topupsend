@@ -17,10 +17,30 @@ import {
   Transaction,
   type ICustomer,
   type IManualPayment,
+  type ITransaction,
 } from "@topupsend/db";
+import { TransactionStatus } from "@topupsend/types";
 import { ApiErrors } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
+import { validateStatusUpdate } from "@/lib/validations/transaction";
+import {
+  fulfillPaidTransaction,
+  type FulfillmentResult,
+} from "@/lib/services/fulfillment.service";
 import type { CreateManualPaymentInput } from "@/lib/validations/manual-payment";
+
+/**
+ * True when an order was paid through a recorded manual payment.
+ * Used by the PGPay webhook (and the payments/verify path that delegates
+ * to it) as the double-fulfillment guard: such an order must never be
+ * fulfilled a second time, even if a PGPay checkout for it later completes.
+ */
+export function isManuallyPaidTransaction(transaction: {
+  paymentGateway?: string;
+  paymentId?: string;
+}): boolean {
+  return transaction.paymentGateway === "manual" && !!transaction.paymentId;
+}
 
 export interface RecordBalancePaymentParams {
   orgId: string;
@@ -115,6 +135,166 @@ export async function recordBalanceManualPayment(
   });
 
   return { manualPayment, customer };
+}
+
+export interface RecordOrderPaymentParams {
+  orgId: string;
+  recordedBy: string;
+  input: CreateManualPaymentInput;
+}
+
+export interface RecordOrderPaymentResult {
+  manualPayment: IManualPayment;
+  transaction: ITransaction;
+  fulfillment: FulfillmentResult;
+}
+
+/**
+ * Record a manual payment that settles an existing unpaid order, then
+ * fulfill the order through the shared fulfillment service — the same
+ * path an online PGPay payment takes (including completion-time usage /
+ * fee tracking inside the fulfillment service).
+ *
+ * Rules: the order must belong to the org, must be awaiting payment
+ * ("pending", or "failed" awaiting retry), must not be a test-mode order,
+ * and the payment must equal the full amount due in the order's currency
+ * (no partials, no conversion in v1).
+ */
+export async function recordOrderManualPayment(
+  params: RecordOrderPaymentParams,
+): Promise<RecordOrderPaymentResult> {
+  const { orgId, recordedBy, input } = params;
+
+  const transaction = await Transaction.findOne({
+    _id: input.transactionId,
+    orgId,
+  });
+
+  if (!transaction) {
+    throw ApiErrors.NotFound("Transaction not found");
+  }
+
+  // Real payments must never be recorded against test-mode orders.
+  if (transaction.isTestMode) {
+    throw ApiErrors.BadRequest(
+      "Manual payments cannot be recorded for test-mode orders",
+    );
+  }
+
+  // An order that already has a recorded manual payment cannot take another.
+  const existingPayment = await ManualPayment.findOne({
+    transactionId: transaction._id?.toString(),
+    orgId,
+    status: "recorded",
+  });
+  if (existingPayment || isManuallyPaidTransaction(transaction)) {
+    throw ApiErrors.Conflict(
+      "A manual payment is already recorded for this order",
+    );
+  }
+
+  if (transaction.status !== "pending" && transaction.status !== "failed") {
+    throw ApiErrors.BadRequest(
+      `Order is not awaiting payment (current status: ${transaction.status})`,
+    );
+  }
+
+  // Currency must match the order's currency — no conversion exists.
+  const currency = input.currency ?? transaction.currency;
+  if (currency !== transaction.currency) {
+    throw ApiErrors.BadRequest(
+      `Currency mismatch: order is in ${transaction.currency}, payment is in ${currency}`,
+    );
+  }
+
+  // Full amount only in v1 (compare in cents to avoid float drift).
+  if (Math.round(input.amount * 100) !== Math.round(transaction.amount * 100)) {
+    throw ApiErrors.BadRequest(
+      `Manual payment for an order must equal the full amount due (${transaction.amount} ${transaction.currency})`,
+    );
+  }
+
+  const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+
+  const manualPayment = await ManualPayment.create({
+    orgId,
+    customerId: transaction.customerId,
+    transactionId: transaction._id?.toString(),
+    orderId: transaction.orderId,
+    amount: input.amount,
+    currency,
+    method: input.method,
+    reference: input.reference,
+    proofReference: input.proofReference,
+    notes: input.notes,
+    receivedAt,
+    appliedTo: "order",
+    status: "recorded",
+    createdBy: recordedBy,
+  });
+
+  // Mark the order paid using the platform's status transition rules.
+  // A failed order first returns to pending (the allowed "retry"
+  // transition), then pending -> paid.
+  if (transaction.status === "failed") {
+    const retry = validateStatusUpdate(
+      TransactionStatus.FAILED,
+      TransactionStatus.PENDING,
+    );
+    if (!retry.valid) {
+      throw ApiErrors.BadRequest(retry.error!);
+    }
+    transaction.status = "pending";
+  }
+  const payTransition = validateStatusUpdate(
+    transaction.status as TransactionStatus,
+    TransactionStatus.PAID,
+  );
+  if (!payTransition.valid) {
+    throw ApiErrors.BadRequest(payTransition.error!);
+  }
+
+  transaction.status = "paid";
+  transaction.paymentGateway = "manual";
+  transaction.paymentId = manualPayment._id?.toString();
+  transaction.timeline.paidAt = receivedAt;
+  (transaction.metadata as Record<string, unknown>).manualPayment = {
+    manualPaymentId: manualPayment._id?.toString(),
+    method: input.method,
+    reference: input.reference,
+    receivedAt,
+    recordedBy,
+  };
+  await transaction.save();
+
+  logger.info("Manual payment recorded (order)", {
+    orgId,
+    userId: recordedBy,
+    manualPaymentId: manualPayment._id?.toString(),
+    transactionId: transaction._id?.toString(),
+    orderId: transaction.orderId,
+    amount: input.amount,
+    currency,
+    method: input.method,
+  });
+
+  // Fulfill via the shared service. Its failure semantics are the existing
+  // ones: fulfillment errors mark the order failed, transfer errors refund
+  // the amount to the customer's balance (status "refunded").
+  const fulfillment = await fulfillPaidTransaction({
+    transaction,
+    refundSource: "manual_payment",
+  });
+
+  if (fulfillment.outcome === "configuration-error") {
+    // The payment itself is real and stays recorded; only fulfillment
+    // failed. Surface the error with the payment id for reconciliation.
+    throw ApiErrors.InternalServerError(
+      `${fulfillment.errorMessage}. The manual payment was recorded (id: ${manualPayment._id?.toString()}) but fulfillment failed; the order is marked failed.`,
+    );
+  }
+
+  return { manualPayment, transaction, fulfillment };
 }
 
 export interface ListManualPaymentsParams {
