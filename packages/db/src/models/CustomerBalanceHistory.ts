@@ -4,7 +4,7 @@ export interface ICustomerBalanceHistory extends Document {
   customerId: mongoose.Types.ObjectId;
   orgId: string;
   amount: number;
-  type: "assignment" | "usage" | "reset" | "adjustment" | "refund";
+  type: "assignment" | "usage" | "reset" | "adjustment" | "refund" | "payment";
   previousBalance: number;
   newBalance: number;
   description: string;
@@ -14,6 +14,9 @@ export interface ICustomerBalanceHistory extends Document {
     orderId?: string;
     adminId?: string;
     transactionId?: string;
+    manualPaymentId?: string;
+    method?: string;
+    reference?: string;
     expiresAt?: Date;
     notes?: string;
   };
@@ -41,7 +44,7 @@ const CustomerBalanceHistorySchema = new Schema<ICustomerBalanceHistory>(
     type: {
       type: String,
       required: true,
-      enum: ["assignment", "usage", "reset", "adjustment", "refund"],
+      enum: ["assignment", "usage", "reset", "adjustment", "refund", "payment"],
       index: true,
     },
     previousBalance: {
@@ -64,6 +67,9 @@ const CustomerBalanceHistorySchema = new Schema<ICustomerBalanceHistory>(
       orderId: String,
       adminId: String,
       transactionId: String,
+      manualPaymentId: String,
+      method: String,
+      reference: String,
       expiresAt: Date,
       notes: String,
     },

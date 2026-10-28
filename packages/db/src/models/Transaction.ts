@@ -14,7 +14,7 @@ export interface ITransaction extends Document {
     | "completed"
     | "failed"
     | "refunded";
-  paymentGateway?: "stripe" | "paypal" | "pgpay" | "balance";
+  paymentGateway?: "stripe" | "paypal" | "pgpay" | "balance" | "manual";
   paymentId?: string;
   paymentType: "gateway" | "balance" | "admin_assigned";
   provider: "dingconnect" | "reloadly";
@@ -134,7 +134,7 @@ const TransactionSchema = new Schema<ITransaction>(
     },
     paymentGateway: {
       type: String,
-      enum: ["stripe", "paypal", "pgpay", "balance"],
+      enum: ["stripe", "paypal", "pgpay", "balance", "manual"],
     },
     paymentId: {
       type: String,

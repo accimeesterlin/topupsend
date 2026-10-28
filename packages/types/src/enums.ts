@@ -37,6 +37,10 @@ export enum Permission {
   UPDATE_TRANSACTION_STATUS = "update_transaction_status",
   REFUND_TRANSACTIONS = "refund_transactions",
 
+  // Manual Payments (offline payments recorded by staff)
+  RECORD_MANUAL_PAYMENT = "record_manual_payment",
+  VOID_MANUAL_PAYMENT = "void_manual_payment",
+
   // Customers
   VIEW_CUSTOMERS = "view_customers",
   EDIT_CUSTOMERS = "edit_customers",
