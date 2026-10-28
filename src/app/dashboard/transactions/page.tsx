@@ -19,7 +19,9 @@ import {
   RefreshCw,
   AlertTriangle,
   MoreVertical,
+  Plus,
 } from "lucide-react";
+import Link from "next/link";
 import {
   Button,
   Card,
@@ -38,6 +40,7 @@ import {
   DropdownMenuSeparator,
 } from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { ManualPaymentDialog } from "@/components/manual-payment-dialog";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { format } from "date-fns";
 import { TransactionStatus } from "@topupsend/types";
@@ -61,6 +64,8 @@ interface Transaction {
   };
   productName?: string;
   providerTransactionId?: string;
+  paymentGateway?: string;
+  paymentId?: string;
   metadata: {
     testMode?: boolean;
     productName?: string;
@@ -118,6 +123,10 @@ export default function TransactionsPage() {
   const [showRefundDialog, setShowRefundDialog] = useState(false);
   const [refunding, setRefunding] = useState(false);
   const [refundReason, setRefundReason] = useState("");
+  const [showManualPaymentDialog, setShowManualPaymentDialog] =
+    useState(false);
+  const [manualPaymentTransaction, setManualPaymentTransaction] =
+    useState<Transaction | null>(null);
 
   // Load filters from localStorage on mount
   useEffect(() => {
@@ -485,10 +494,26 @@ export default function TransactionsPage() {
               View and manage all your top-up transactions
             </p>
           </div>
-          <Button variant="outline" disabled={transactions.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/transactions/manual-payments">
+                Manual Payments
+              </Link>
+            </Button>
+            <Button
+              onClick={() => {
+                setManualPaymentTransaction(null);
+                setShowManualPaymentDialog(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Record Manual Payment
+            </Button>
+            <Button variant="outline" disabled={transactions.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -610,6 +635,12 @@ export default function TransactionsPage() {
                             Test Mode
                           </span>
                         )}
+                        {transaction.paymentGateway === "manual" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-xs font-medium">
+                            <DollarSign className="h-3 w-3" />
+                            Manual
+                          </span>
+                        )}
                         {getStatusBadge(transaction.status)}
                       </div>
 
@@ -692,6 +723,19 @@ export default function TransactionsPage() {
                             <RefreshCw className="h-3.5 w-3.5 mr-2" />
                             Update Status
                           </DropdownMenuItem>
+                          {(transaction.status === "pending" ||
+                            transaction.status === "failed") && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setManualPaymentTransaction(transaction);
+                                setShowManualPaymentDialog(true);
+                              }}
+                            >
+                              <DollarSign className="h-3.5 w-3.5 mr-2" />
+                              Record Offline Payment
+                            </DropdownMenuItem>
+                          )}
                           {transaction.status === "failed" && (
                             <DropdownMenuItem
                               onClick={(e) => {
@@ -1731,6 +1775,26 @@ export default function TransactionsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Manual Payment Dialog */}
+        <ManualPaymentDialog
+          open={showManualPaymentDialog}
+          onOpenChange={setShowManualPaymentDialog}
+          presetOrder={
+            manualPaymentTransaction
+              ? {
+                  id: manualPaymentTransaction._id,
+                  orderId: manualPaymentTransaction.orderId,
+                  amount: manualPaymentTransaction.amount,
+                  currency: manualPaymentTransaction.currency,
+                  status: manualPaymentTransaction.status,
+                  phoneNumber:
+                    manualPaymentTransaction.recipient.phoneNumber,
+                }
+              : undefined
+          }
+          onSuccess={() => fetchTransactions()}
+        />
       </div>
     </DashboardLayout>
   );

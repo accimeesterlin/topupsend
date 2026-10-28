@@ -63,6 +63,7 @@ import {
   DialogFooter,
 } from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { ManualPaymentDialog } from "@/components/manual-payment-dialog";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 
 interface Customer {
@@ -119,6 +120,9 @@ interface BalanceHistory {
     orderId?: string;
     transactionId?: string;
     expiresAt?: string;
+    manualPaymentId?: string;
+    method?: string;
+    reference?: string;
   };
 }
 
@@ -132,6 +136,7 @@ export default function CustomerDetailPage() {
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [showManualPayment, setShowManualPayment] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -886,6 +891,14 @@ export default function CustomerDetailPage() {
                     Add Balance
                   </Button>
                   <Button
+                    onClick={() => setShowManualPayment(true)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Receipt className="h-4 w-4 mr-1" />
+                    Record Payment
+                  </Button>
+                  <Button
                     onClick={() => openBalanceModal("withdraw")}
                     variant="outline"
                     size="sm"
@@ -933,6 +946,15 @@ export default function CustomerDetailPage() {
                                 <p className="text-sm text-muted-foreground">
                                   {entry.description}
                                 </p>
+                                {entry.type === "payment" &&
+                                  entry.metadata?.method && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Method:{" "}
+                                      {entry.metadata.method.replace("_", " ")}
+                                      {entry.metadata.reference &&
+                                        ` • Ref: ${entry.metadata.reference}`}
+                                    </p>
+                                  )}
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {formatDate(entry.createdAt)}
                                   {entry.metadata?.adminId && ` by Admin`}
@@ -1360,6 +1382,23 @@ export default function CustomerDetailPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Manual Payment Dialog (credits this customer's balance) */}
+        <ManualPaymentDialog
+          open={showManualPayment}
+          onOpenChange={setShowManualPayment}
+          presetCustomer={{
+            id: customer._id,
+            name: customer.name,
+            email: customer.email,
+            phoneNumber: customer.phoneNumber,
+            balanceCurrency: customer.balanceCurrency || "USD",
+          }}
+          onSuccess={async () => {
+            await fetchCustomer();
+            await fetchBalanceHistory();
+          }}
+        />
       </div>
     </DashboardLayout>
   );
