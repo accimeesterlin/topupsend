@@ -8,6 +8,33 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+const DISMISSED_AT_KEY = 'pwa-prompt-dismissed-at';
+/**
+ * After a dismissal, don't show the install banner again for 30 days.
+ * Persisted in localStorage (the previous sessionStorage flag was written
+ * but never read, so the banner came back on every visit).
+ */
+const DISMISSAL_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+
+function wasDismissedRecently(): boolean {
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_AT_KEY);
+    if (!raw) return false;
+    const dismissedAt = Number(raw);
+    return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < DISMISSAL_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissal() {
+  try {
+    window.localStorage.setItem(DISMISSED_AT_KEY, String(Date.now()));
+  } catch {
+    // Storage unavailable (e.g. private mode) — banner behaves as before.
+  }
+}
+
 export function PWAInstaller() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
@@ -42,6 +69,12 @@ export function PWAInstaller() {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
 
+      // Don't nag: if the user dismissed the banner within the cooldown,
+      // keep the deferred prompt (install stays possible) but stay quiet.
+      if (wasDismissedRecently()) {
+        return;
+      }
+
       // Show install prompt after a short delay (better UX)
       setTimeout(() => {
         setShowInstallPrompt(true);
@@ -75,6 +108,12 @@ export function PWAInstaller() {
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`[PWA] User response: ${outcome}`);
 
+    // Declining the native prompt counts as a dismissal too — don't
+    // re-offer on the next visit inside the cooldown.
+    if (outcome === 'dismissed') {
+      rememberDismissal();
+    }
+
     // Clear the deferredPrompt
     setDeferredPrompt(null);
     setShowInstallPrompt(false);
@@ -82,8 +121,8 @@ export function PWAInstaller() {
 
   const handleDismiss = () => {
     setShowInstallPrompt(false);
-    // Remember dismissal for this session
-    sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+    // Remember the dismissal across visits (localStorage, timestamped)
+    rememberDismissal();
   };
 
   // Don't show if already installed or dismissed
