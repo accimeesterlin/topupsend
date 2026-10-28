@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Zap, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
@@ -14,9 +14,14 @@ export function PublicNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/topupsend-icon.svg"
+              alt="TopUpSend"
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-lg"
+            />
             <span className="text-lg font-bold text-gray-900">TopUpSend</span>
           </Link>
 

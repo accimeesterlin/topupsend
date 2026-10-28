@@ -11,3 +11,14 @@ placeholder Zap tile in `src/components/PublicNavbar.tsx`.
   on slate (#0F172A / #10B981). "Top up" literally.
 - **C — Globe Plus** (`concept-c-*`): globe with a top-up plus badge
   (sky #0284C7 / amber #F59E0B). "Global top-up"; busiest at 16px.
+
+## Decision (2026-10-28)
+
+**Concept B — Top Arrow picked**, recolored to the website's existing blue:
+tile #2563EB (blue-600), arrow #BFDBFE (blue-200), wordmark #171717 + #2563EB
+(dark-surface variant uses #60A5FA for "Send").
+
+Final assets live in `public/brand/` (`topupsend-icon.svg`,
+`topupsend-lockup.svg`, `topupsend-lockup-dark.svg`); the PWA/favicon set in
+`public/icons/`, `public/favicon.*` and `public/apple-touch-icon.png` was
+regenerated from the picked mark, and `PublicNavbar` now renders it.

@@ -1,28 +1,6 @@
-<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-
-  <!-- Background -->
-  <rect width="128" height="128" fill="url(#gradient)" rx="19.2"/>
-
-  <!-- Phone icon -->
-  <g transform="translate(38.4, 32)">
-    <rect x="0" y="0" width="51.2" height="64"
-          fill="white" rx="3.84" stroke="white" stroke-width="1.28"/>
-    <rect x="6.4" y="6.4" width="38.4" height="44.8"
-          fill="#3b82f6" rx="1.92"/>
-    <circle cx="25.6" cy="57.6" r="3.2" fill="white"/>
-  </g>
-
-  <!-- Signal waves -->
-  <g transform="translate(83.2, 44.8)">
-    <path d="M 0,12.8 Q 6.4,6.4 12.8,12.8"
-          stroke="white" stroke-width="1.92" fill="none" opacity="0.8"/>
-    <path d="M 0,19.2 Q 9.6,9.6 19.2,19.2"
-          stroke="white" stroke-width="1.92" fill="none" opacity="0.6"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">
+  <rect width="128" height="128" rx="14" fill="#2563EB"/>
+  <path d="M32 7 L45 20 L19 20 Z" fill="#BFDBFE"/>
+  <rect x="16" y="24" width="32" height="9" rx="2" fill="#FFFFFF"/>
+  <rect x="27.5" y="33" width="9" height="19" rx="2" fill="#FFFFFF"/>
 </svg>
