@@ -8,6 +8,7 @@ import {
 import { createPGPayService } from "@/lib/services/pgpay.service";
 import { logger } from "@/lib/logger";
 import { fulfillPaidTransaction } from "@/lib/services/fulfillment.service";
+import { isManuallyPaidTransaction } from "@/lib/services/manual-payment.service";
 
 /**
  * POST /api/v1/webhooks/pgpay
@@ -78,6 +79,25 @@ export async function POST(request: NextRequest) {
       return createSuccessResponse({
         success: true,
         message: "Transaction already completed",
+      });
+    }
+
+    // Double-fulfillment guard: an order paid manually (offline payment
+    // recorded by staff) must never be fulfilled a second time, even if a
+    // PGPay checkout for the same order later completes. The payments/verify
+    // route delegates to this webhook, so it is covered by the same guard.
+    if (isManuallyPaidTransaction(transaction)) {
+      logger.warn(
+        "PGPay webhook received for a manually paid transaction - skipping fulfillment",
+        {
+          orderId: transaction.orderId,
+          status: transaction.status,
+          manualPaymentId: transaction.paymentId,
+        },
+      );
+      return createSuccessResponse({
+        success: true,
+        message: "Transaction already paid manually",
       });
     }
 

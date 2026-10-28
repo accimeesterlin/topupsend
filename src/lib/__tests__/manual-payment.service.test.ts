@@ -52,6 +52,10 @@ jest.mock("@topupsend/db", () => ({
   Transaction: { findOne: jest.fn() },
 }));
 
+jest.mock("@/lib/services/fulfillment.service", () => ({
+  fulfillPaidTransaction: jest.fn(),
+}));
+
 const mockCustomerFindById = Customer.findById as jest.Mock;
 const mockHistoryCreate = CustomerBalanceHistory.create as jest.Mock;
 const mockPaymentCreate = ManualPayment.create as jest.Mock;
