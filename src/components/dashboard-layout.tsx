@@ -23,6 +23,7 @@ import {
   DollarSign,
   User,
   Shield,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@topupsend/ui";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,11 @@ const navigationSections = [
         name: "Transactions",
         href: "/dashboard/transactions",
         icon: ShoppingCart,
+      },
+      {
+        name: "Manual Payments",
+        href: "/dashboard/transactions/manual-payments",
+        icon: Receipt,
       },
       { name: "Customers", href: "/dashboard/customers", icon: Users },
     ],
