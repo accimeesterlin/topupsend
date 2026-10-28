@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 64" width="264" height="64">
+  <rect width="64" height="64" rx="14" fill="#2563EB"/>
+  <path d="M32 7 L45 20 L19 20 Z" fill="#BFDBFE"/>
+  <rect x="16" y="24" width="32" height="9" rx="2" fill="#FFFFFF"/>
+  <rect x="27.5" y="33" width="9" height="19" rx="2" fill="#FFFFFF"/>
+  <text x="76" y="42" font-family="Inter, Helvetica, Arial, sans-serif" font-size="27" font-weight="800" letter-spacing="-0.5"><tspan fill="#FFFFFF">TopUp</tspan><tspan fill="#60A5FA">Send</tspan></text>
+</svg>

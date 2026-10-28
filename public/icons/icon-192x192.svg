@@ -1,28 +1,6 @@
-<svg width="192" height="192" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-
-  <!-- Background -->
-  <rect width="192" height="192" fill="url(#gradient)" rx="28.799999999999997"/>
-
-  <!-- Phone icon -->
-  <g transform="translate(57.599999999999994, 48)">
-    <rect x="0" y="0" width="76.80000000000001" height="96"
-          fill="white" rx="5.76" stroke="white" stroke-width="1.92"/>
-    <rect x="9.600000000000001" y="9.600000000000001" width="57.599999999999994" height="67.19999999999999"
-          fill="#3b82f6" rx="2.88"/>
-    <circle cx="38.400000000000006" cy="86.4" r="4.800000000000001" fill="white"/>
-  </g>
-
-  <!-- Signal waves -->
-  <g transform="translate(124.80000000000001, 67.19999999999999)">
-    <path d="M 0,19.200000000000003 Q 9.600000000000001,9.600000000000001 19.200000000000003,19.200000000000003"
-          stroke="white" stroke-width="2.88" fill="none" opacity="0.8"/>
-    <path d="M 0,28.799999999999997 Q 14.399999999999999,14.399999999999999 28.799999999999997,28.799999999999997"
-          stroke="white" stroke-width="2.88" fill="none" opacity="0.6"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="192" height="192">
+  <rect width="192" height="192" rx="14" fill="#2563EB"/>
+  <path d="M32 7 L45 20 L19 20 Z" fill="#BFDBFE"/>
+  <rect x="16" y="24" width="32" height="9" rx="2" fill="#FFFFFF"/>
+  <rect x="27.5" y="33" width="9" height="19" rx="2" fill="#FFFFFF"/>
 </svg>
