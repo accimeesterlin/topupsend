@@ -33,6 +33,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.UPDATE_TRANSACTION_STATUS,
     Permission.REFUND_TRANSACTIONS,
 
+    // Manual Payments (operators record; voiding stays admin-only)
+    Permission.RECORD_MANUAL_PAYMENT,
+
     // Customers
     Permission.VIEW_CUSTOMERS,
     Permission.EDIT_CUSTOMERS,

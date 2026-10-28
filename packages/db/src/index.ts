@@ -8,6 +8,13 @@ export { Integration, type IIntegration } from "./models/Integration";
 export { Product, type IProduct } from "./models/Product";
 export { Transaction, type ITransaction } from "./models/Transaction";
 export {
+  ManualPayment,
+  type IManualPayment,
+  type ManualPaymentMethod,
+  type ManualPaymentApplication,
+  type ManualPaymentStatus,
+} from "./models/ManualPayment";
+export {
   Customer,
   type ICustomer,
   type ICustomerModel,

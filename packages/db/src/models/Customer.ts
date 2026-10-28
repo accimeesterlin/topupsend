@@ -73,6 +73,7 @@ export interface ICustomer extends Document {
     amount: number,
     description: string,
     metadata?: any,
+    historyType?: "assignment" | "payment",
   ): Promise<void>;
   refundBalance(
     amount: number,
@@ -309,10 +310,13 @@ CustomerSchema.methods.deductBalance = async function (
 };
 
 // Add balance with history tracking
+// historyType distinguishes credit an admin assigned ("assignment", default)
+// from money the customer actually paid ("payment", used by manual payments)
 CustomerSchema.methods.addBalance = async function (
   amount: number,
   description: string,
   metadata?: any,
+  historyType: "assignment" | "payment" = "assignment",
 ): Promise<void> {
   const previousBalance = this.currentBalance;
   this.currentBalance += amount;
@@ -326,7 +330,7 @@ CustomerSchema.methods.addBalance = async function (
     customerId: this._id,
     orgId: this.orgId,
     amount,
-    type: "assignment",
+    type: historyType,
     previousBalance,
     newBalance: this.currentBalance,
     description,
