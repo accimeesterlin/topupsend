@@ -388,9 +388,12 @@ export async function POST(request: NextRequest) {
         environment: paymentProvider.environment,
       });
 
-      // Initialize PGPay service
+      // Initialize PGPay service (v2 when the provider carries an
+      // org API key, else the v1 user-ID contract)
       const pgpay = createPGPayService({
         userId: paymentProvider.credentials.userId as string,
+        merchantId: paymentProvider.credentials.merchantId as string,
+        apiKey: paymentProvider.credentials.apiKey as string,
         environment: paymentProvider.environment,
       });
 

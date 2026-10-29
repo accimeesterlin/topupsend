@@ -5,6 +5,7 @@ import { PaymentProvider } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
+import { createPGPayService } from "@/lib/services/pgpay.service";
 
 /**
  * POST /api/v1/payment-providers/[id]/test
@@ -54,6 +55,14 @@ export async function POST(
         provider.status = "active";
         provider.metadata.lastTestSuccess = new Date();
         provider.metadata.lastTestError = undefined;
+        // v2 flip step: the connection test learns the PG
+        // organization (merchant) id — persist it on the credentials.
+        if (provider.provider === "pgpay" && testResult.details?.merchantId) {
+          provider.credentials = {
+            ...provider.credentials,
+            merchantId: testResult.details.merchantId,
+          };
+        }
         await provider.save();
 
         logger.info("Payment provider test successful", {
@@ -188,136 +197,53 @@ async function testPayPalConnection(
 
 /**
  * Test PGPay connection
+ *
+ * Runs through PGPayService so the test exercises exactly the
+ * contract the payments will use: v1 (user ID in the payload) or v2
+ * (org API key header) when the provider carries an API key. Under
+ * v2 a successful test also learns the PG organization (merchant)
+ * id, returned in details for the caller to persist.
  */
 async function testPGPayConnection(
   provider: any,
 ): Promise<{ success: boolean; message: string; details?: any }> {
-  const { userId } = provider.credentials;
+  const { userId, apiKey, merchantId } = provider.credentials;
 
-  if (!userId) {
+  if (!userId && !apiKey) {
     return {
       success: false,
-      message: "Missing required PGPay User ID",
+      message: "Missing required PGPay credentials (User ID or API key)",
     };
   }
 
-  // Validate UUID format
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(userId)) {
-    return {
-      success: false,
-      message: "Invalid PGPay User ID format. Must be a valid UUID.",
-    };
-  }
-
-  // Test with a small payment creation (we won't complete it, just validate credentials)
-  try {
-    const baseUrl =
-      provider.environment === "sandbox"
-        ? "https://sandbox.pgecom.com/api/pgpay/token"
-        : "https://app.pgecom.com/api/pgpay/token";
-
-    // Required fields for PGPay API
-    const testPayload = {
-      userID: userId,
-      amount: 1, // Minimum amount required by PGPay is 1
-      currency: "usd",
-      orderId: `test-${Date.now()}`,
-      customerEmail: "test@example.com",
-      customerFirstName: "Test",
-      customerLastName: "User",
-      successUrl: "/payment/success",
-      errorUrl: "/payment/cancel",
-      description: "Connection test - do not complete",
-    };
-
-    logger.info("Testing PGPay connection", {
-      baseUrl,
-      userId,
-      environment: provider.environment,
-    });
-
-    const response = await fetch(baseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(testPayload),
-    });
-
-    const contentType = response.headers.get("content-type");
-    let data: any = {};
-
-    // Handle both JSON and non-JSON responses
-    if (contentType && contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      const text = await response.text();
-      logger.warn("PGPay returned non-JSON response", {
-        text,
-        status: response.status,
-      });
-      data = { message: text || "Unexpected response format" };
-    }
-
-    logger.info("PGPay API response", {
-      status: response.status,
-      ok: response.ok,
-      data: JSON.stringify(data).substring(0, 200),
-    });
-
-    if (response.ok) {
-      return {
-        success: true,
-        message: "PGPay credentials validated successfully",
-        details: {
-          environment: provider.environment,
-          userId,
-          testResponse: "Connection successful",
-        },
-      };
-    } else {
-      // Check if it's just an order ID conflict (which means the API is accessible)
-      if (data.message && data.message.includes("already exist")) {
-        return {
-          success: true,
-          message: "PGPay credentials validated successfully",
-          details: {
-            environment: provider.environment,
-            userId,
-            note: "API accessible and responding",
-          },
-        };
-      }
-
-      // If we get a "not found" error for the merchant, it means API is working
-      // but the User ID doesn't exist in their system
-      if (
-        data.message &&
-        (data.message.includes("not found") || data.status === 404)
-      ) {
-        return {
-          success: false,
-          message: `PGPay User ID not recognized. Please verify your User ID is correct. API Error: ${data.message}`,
-        };
-      }
-
+  if (userId) {
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
       return {
         success: false,
-        message: data.message || "Failed to validate PGPay credentials",
+        message: "Invalid PGPay User ID format. Must be a valid UUID.",
       };
     }
-  } catch (error: any) {
-    logger.error("PGPay connection test failed", {
-      error: error.message,
-      stack: error.stack,
-      cause: error.cause,
-    });
-
-    return {
-      success: false,
-      message: `Failed to connect to PGPay API: ${error.message}. Please check your network connection and try again.`,
-    };
   }
+
+  const pgpay = createPGPayService({
+    userId,
+    merchantId,
+    apiKey,
+    environment: provider.environment,
+  });
+  const result = await pgpay.testConnection();
+
+  return {
+    success: result.success,
+    message: result.message,
+    details: {
+      environment: provider.environment,
+      userId,
+      apiVersion: apiKey ? "v2" : "v1",
+      ...(result.merchantId ? { merchantId: result.merchantId } : {}),
+    },
+  };
 }

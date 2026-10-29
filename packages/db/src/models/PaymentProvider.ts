@@ -14,7 +14,9 @@ export interface IPaymentProvider extends Document {
     clientId?: string;
     clientSecret?: string;
     // PGPay
-    userId?: string; // UUID format
+    userId?: string; // UUID format (v1 credential: the merchant's PG user ID)
+    merchantId?: string; // v2: the PG organization id, learned from the connection test
+    apiKey?: string; // v2: org API secret (sk_...) — its presence selects the v2 contract
     // Allow dynamic fields
     [key: string]: any;
   };

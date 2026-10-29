@@ -93,16 +93,19 @@ export async function POST(req: NextRequest) {
 
     // Initialize PGPay service
     const pgPayUserId = process.env.PGPAY_USER_ID;
+    const pgPayApiKey = process.env.PGPAY_API_KEY;
     const pgPayEnvironment =
       (process.env.PGPAY_ENVIRONMENT as "sandbox" | "production") || "sandbox";
 
-    if (!pgPayUserId) {
-      console.error("PGPAY_USER_ID not configured");
+    if (!pgPayUserId && !pgPayApiKey) {
+      console.error("PGPAY_USER_ID / PGPAY_API_KEY not configured");
       return createErrorResponse("Payment service not configured", 500);
     }
 
     const pgPayService = new PGPayService({
       userId: pgPayUserId,
+      apiKey: pgPayApiKey,
+      merchantId: process.env.PGPAY_MERCHANT_ID,
       environment: pgPayEnvironment,
     });
 
