@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       orgId: transaction.orgId,
       provider: "pgpay",
       status: "active",
-    }).select("+credentials.userId");
+    }).select("+credentials.userId +credentials.apiKey +credentials.merchantId");
 
     if (!paymentProvider) {
       logger.error("PGPay payment provider not found", {
@@ -123,9 +123,12 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Payment provider not configured", 500);
     }
 
-    // Initialize PGPay service to verify payment
+    // Initialize PGPay service to verify payment (v2 org-key contract
+    // when the provider carries an API key, else v1)
     const pgpay = createPGPayService({
       userId: paymentProvider.credentials.userId as string,
+      merchantId: paymentProvider.credentials.merchantId as string,
+      apiKey: paymentProvider.credentials.apiKey as string,
       environment: paymentProvider.environment,
     });
 

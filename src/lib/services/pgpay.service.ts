@@ -7,7 +7,9 @@ import { logger } from "@/lib/logger";
  */
 
 export interface PGPayCredentials {
-  userId: string; // UUID format
+  userId?: string; // UUID format (v1 credential)
+  merchantId?: string; // PG organization id (v2) — learned from the connection test
+  apiKey?: string; // Org API secret, sk_... (v2) — its presence selects v2
   environment: "sandbox" | "production";
 }
 
@@ -34,6 +36,8 @@ export interface PGPayPaymentResponse {
   currency: string;
   status: string;
   redirectUrl: string; // PGPay returns the checkout URL
+  merchantId?: string; // v2: the merchant organization PG resolved the key to
+  merchantName?: string;
   // Additional fields returned by PGPay
   [key: string]: any;
 }
@@ -52,20 +56,33 @@ export interface PGPayVerificationResponse {
 }
 
 export class PGPayService {
-  private userId: string;
+  private userId?: string;
+  private merchantId?: string;
+  private apiKey?: string;
   private baseUrl: string;
+  /** v2 (org contract) when an org API key is configured, else v1. */
+  readonly isV2: boolean;
 
   constructor(credentials: PGPayCredentials) {
     this.userId = credentials.userId;
-    this.baseUrl =
+    this.merchantId = credentials.merchantId;
+    this.apiKey = credentials.apiKey;
+    this.isV2 = Boolean(credentials.apiKey);
+    const base =
       credentials.environment === "sandbox"
         ? "https://sandbox.pgecom.com/api/pgpay"
         : "https://app.pgecom.com/api/pgpay";
+    this.baseUrl = this.isV2 ? `${base}/v2` : base;
 
     logger.info("PGPay service initialized", {
       environment: credentials.environment,
       baseUrl: this.baseUrl,
+      apiVersion: this.isV2 ? "v2" : "v1",
     });
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.isV2 ? { Authorization: `Bearer ${this.apiKey}` } : {};
   }
 
   /**
@@ -77,8 +94,17 @@ export class PGPayService {
   ): Promise<PGPayPaymentResponse> {
     const url = `${this.baseUrl}/token`;
 
+    if (!this.isV2 && !this.userId) {
+      throw new Error(
+        "PGPay User ID is required for the v1 contract (or configure an org API key for v2)",
+      );
+    }
+
     const payload = {
-      userID: this.userId,
+      // v1 authenticates by the userID in the payload. v2
+      // authenticates by the org key header and REJECTS a payload
+      // that still carries a userID — so it is v1-only, by design.
+      ...(this.isV2 ? {} : { userID: this.userId }),
       amount: request.amount,
       currency: request.currency || "usd",
       orderId: request.orderId,
@@ -106,6 +132,7 @@ export class PGPayService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...this.authHeaders(),
         },
         body: JSON.stringify(payload),
       });
@@ -157,6 +184,7 @@ export class PGPayService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...this.authHeaders(),
         },
         body: JSON.stringify(payload),
       });
@@ -190,8 +218,16 @@ export class PGPayService {
 
   /**
    * Test connection to PGPay API
+   *
+   * Under v2 the test doubles as the migration step: PG's token
+   * response names the merchant organization, and the returned
+   * `merchantId` is what the caller stores on the provider record.
    */
-  async testConnection(): Promise<{ success: boolean; message: string }> {
+  async testConnection(): Promise<{
+    success: boolean;
+    message: string;
+    merchantId?: string;
+  }> {
     try {
       const testPayload: PGPayPaymentRequest = {
         amount: 1, // PGPay minimum is 1
@@ -205,11 +241,12 @@ export class PGPayService {
         description: "Connection test - do not complete",
       };
 
-      await this.createPayment(testPayload);
+      const result = await this.createPayment(testPayload);
 
       return {
         success: true,
         message: "PGPay connection test successful",
+        merchantId: result.merchantId,
       };
     } catch (error: any) {
       logger.error("PGPay connection test failed", {
@@ -222,6 +259,18 @@ export class PGPayService {
         return {
           success: true,
           message: "PGPay connection verified",
+        };
+      }
+
+      // v2: a rejected org key means the credential itself is wrong
+      if (
+        error.message &&
+        (error.message.includes("Invalid API key") ||
+          error.message.includes("Unauthorized"))
+      ) {
+        return {
+          success: false,
+          message: `PGPay API key not recognized. Please verify your organization API key is correct. Error: ${error.message}`,
         };
       }
 
