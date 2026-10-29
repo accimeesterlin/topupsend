@@ -84,13 +84,18 @@ export async function POST(request: NextRequest) {
         return createErrorResponse('PayPal Client Secret is required', 400);
       }
     } else if (provider === 'pgpay') {
-      if (!credentials.userId) {
-        return createErrorResponse('PGPay User ID is required', 400);
+      // v1 connects with the merchant's PG user ID; v2 with the PG
+      // organization's API secret. Either credential is sufficient —
+      // the API key wins when both are present.
+      if (!credentials.userId && !credentials.apiKey) {
+        return createErrorResponse('PGPay User ID or API key is required', 400);
       }
-      // Validate UUID format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(credentials.userId)) {
-        return createErrorResponse('PGPay User ID must be a valid UUID format', 400);
+      if (credentials.userId) {
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(credentials.userId)) {
+          return createErrorResponse('PGPay User ID must be a valid UUID format', 400);
+        }
       }
     }
 
