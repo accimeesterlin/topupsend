@@ -138,7 +138,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-background">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -150,13 +150,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 transform bg-background border-r transition-transform duration-200 ease-in-out lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r transition-transform duration-200 ease-in-out lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center gap-3 px-6">
+          <div className="flex h-16 items-center gap-3 border-b px-6">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <CreditCard className="h-5 w-5 text-primary-foreground" />
             </div>
@@ -203,7 +203,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                             isActive
                               ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                           )}
                           onClick={() => setSidebarOpen(false)}
                         >
@@ -223,7 +223,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background px-6">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-6">
           <Button
             variant="ghost"
             size="sm"
@@ -312,7 +312,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="p-6">{children}</main>
+        <main className="p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

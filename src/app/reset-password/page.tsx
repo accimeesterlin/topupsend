@@ -103,7 +103,7 @@ function ResetPasswordForm() {
 
   if (verifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6">
             <div className="text-center">
@@ -117,7 +117,7 @@ function ResetPasswordForm() {
 
   if (!validToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Invalid Reset Link</CardTitle>
@@ -149,7 +149,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">Reset Password</CardTitle>
@@ -211,7 +211,7 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6">
             <div className="text-center">
