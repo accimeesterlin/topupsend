@@ -14,55 +14,55 @@ export default function StaffPortalLayout({
 
   return (
     <LanguageProvider>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="bg-white shadow-sm">
+        <header className="bg-card border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-8">
                 <Link
                   href="/staff-portal"
-                  className="text-2xl font-bold text-blue-600"
+                  className="text-2xl font-bold text-foreground"
                 >
                   Staff Portal
                 </Link>
                 <nav className="hidden md:flex space-x-4">
                   <Link
                     href="/staff-portal"
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
                       pathname === "/staff-portal"
-                        ? "bg-blue-100 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     Dashboard
                   </Link>
                   <Link
                     href="/staff-portal/my-transactions"
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
                       pathname === "/staff-portal/my-transactions"
-                        ? "bg-blue-100 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     My Transactions
                   </Link>
                   <Link
                     href="/staff-portal/my-api-keys"
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
                       pathname === "/staff-portal/my-api-keys"
-                        ? "bg-blue-100 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     API Keys
                   </Link>
                   <Link
                     href="/staff-portal/my-account"
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
                       pathname === "/staff-portal/my-account"
-                        ? "bg-blue-100 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     My Account
@@ -73,7 +73,7 @@ export default function StaffPortalLayout({
                 <LanguageSwitcher />
                 <Link
                   href="/dashboard"
-                  className="text-gray-700 hover:text-gray-900"
+                  className="text-muted-foreground hover:text-foreground"
                 >
                   Back to Admin
                 </Link>
@@ -88,9 +88,9 @@ export default function StaffPortalLayout({
         </main>
 
         {/* Footer */}
-        <footer className="bg-white border-t mt-auto">
+        <footer className="bg-card border-t mt-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <p className="text-center text-gray-500 text-sm">
+            <p className="text-center text-muted-foreground text-sm">
               © {new Date().getFullYear()} Prepaid Minutes Staff Portal. All
               rights reserved.
             </p>

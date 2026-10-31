@@ -47,7 +47,7 @@ export function Dialog({ open: controlledOpen, onOpenChange, children }: DialogP
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in-0"
+            className="fixed inset-0 z-50 bg-black/50 animate-in fade-in-0"
             onClick={() => handleOpenChange(false)}
           />
           {/* Dialog */}
