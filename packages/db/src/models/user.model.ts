@@ -7,6 +7,10 @@ export interface IUser extends Document {
   roles: UserRole[];
   orgId: mongoose.Types.ObjectId;
   isActive: boolean;
+  /** Sign in with PG link: the PG OIDC subject (authId). Set only by the PG SSO callback. */
+  pgAuthId?: string;
+  /** Sign in with PG link: the PG User._id. Set only by the PG SSO callback. */
+  pgUserId?: string;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
   twoFactorEnabled: boolean;
@@ -68,6 +72,16 @@ const userSchema = new Schema<IUser>(
     twoFactorCodeExpires: {
       type: Date,
       select: false, // Don't include by default
+    },
+    pgAuthId: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    pgUserId: {
+      type: String,
+      index: true,
+      sparse: true,
     },
   },
   {
