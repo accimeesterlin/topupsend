@@ -2,7 +2,7 @@
  * Partner Apps grid rendering.
  *
  * Pins the card contract the dashboard page relies on: catalog order
- * is preserved, category badges read "PG app" / "Affiliated", Visit
+ * is preserved, only affiliated apps carry an "Affiliated" badge, Visit
  * links open the app URL in a new tab with safe rel attributes, apps
  * with a logoUrl render the logo while the rest get a monogram tile,
  * and an empty catalog renders a clean empty state.
@@ -43,13 +43,13 @@ describe('PartnerAppsGrid', () => {
     expect(headings).toEqual(['Zeta', 'Alpha']);
   });
 
-  it('labels PG apps and affiliated apps with their badges', () => {
+  it('badges only affiliated apps', () => {
     const container = renderGrid([
       app({ name: 'Hub App', url: 'https://hub.example.com', category: 'pg' }),
       app({ name: 'Partner Co', url: 'https://partner.example.com', category: 'affiliated' }),
     ]);
 
-    expect(container.textContent).toContain('PG app');
+    expect(container.textContent).not.toContain('PG app');
     expect(container.textContent).toContain('Affiliated');
   });
 
