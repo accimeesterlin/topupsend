@@ -34,9 +34,9 @@ function PartnerAppCard({ app }: { app: PartnerApp }) {
               {monogram(app.name)}
             </div>
           )}
-          <Badge variant={app.category === "pg" ? "default" : "secondary"}>
-            {app.category === "pg" ? "PG app" : "Affiliated"}
-          </Badge>
+          {app.category === "affiliated" && (
+            <Badge variant="secondary">Affiliated</Badge>
+          )}
         </div>
 
         <h2 className="mt-4 font-semibold">{app.name}</h2>
