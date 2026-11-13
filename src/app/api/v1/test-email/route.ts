@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth-middleware';
 import { EmailService } from '@/lib/services/email.service';
 import { createSuccessResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
+import { hasPermission } from '@/lib/permissions';
+import { escapeHtml } from '@/lib/escape-html';
+import { Permission } from '@topupsend/types';
 import { logger } from '@/lib/logger';
 
 /**
@@ -13,10 +16,26 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request);
 
+    // Sending through the org's email integration is an org write, not a
+    // read: any-role access let even VIEWERs send arbitrary mail through
+    // the org's provider (F-M5). Match the other org-write routes.
+    if (!hasPermission(session.roles, Permission.EDIT_INTEGRATIONS)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to send test emails',
+      );
+    }
+
     const body = await request.json();
     const { to, subject, message } = body;
 
-    if (!to || !subject || !message) {
+    if (
+      typeof to !== 'string' ||
+      typeof subject !== 'string' ||
+      typeof message !== 'string' ||
+      !to ||
+      !subject ||
+      !message
+    ) {
       return createSuccessResponse(
         {
           success: false,
@@ -41,7 +60,7 @@ export async function POST(request: NextRequest) {
 </head>
 <body style="font-family: Arial, sans-serif; padding: 20px;">
   <h2>Test Email</h2>
-  <p>${message}</p>
+  <p>${escapeHtml(message)}</p>
   <p style="color: #666; font-size: 12px; margin-top: 30px;">
     This is a test email sent from TopUpSend platform.
   </p>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
+import { resolveDingConnectBaseUrl } from '@/lib/services/dingconnect.service';
 
 // GET all integrations for the organization
 export async function GET(_request: NextRequest) {
@@ -77,6 +78,20 @@ export async function POST(request: NextRequest) {
         { error: 'Environment is required for Reloadly' },
         { status: 400 }
       );
+    }
+
+    // DingConnect baseUrl is allowlisted (F-M8): the stored value is used
+    // for outbound calls carrying the org's API key, so reject anything
+    // that is not the real DingConnect host at save time as well.
+    if (provider === 'dingconnect' && credentials.baseUrl) {
+      try {
+        credentials.baseUrl = resolveDingConnectBaseUrl(credentials.baseUrl);
+      } catch (error: any) {
+        return NextResponse.json(
+          { error: 'Invalid baseUrl', detail: error.message },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate isPrimaryEmail is only for email providers

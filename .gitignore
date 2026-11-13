@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Local Claude Code settings (may contain live tokens in allow-list entries)
+.claude/settings.local.json

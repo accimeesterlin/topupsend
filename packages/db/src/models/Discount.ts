@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { randomInt } from 'crypto';
 
 export interface IDiscount extends Document {
   orgId: string;
@@ -189,12 +190,14 @@ DiscountSchema.methods.calculateDiscount = function (amount: number): number {
   return Math.round(discount * 100) / 100; // Round to 2 decimal places
 };
 
-// Static method to generate a random discount code
+// Static method to generate a random discount code.
+// Discount codes are bearer values (whoever holds one gets the discount),
+// so they are drawn from a CSPRNG, not Math.random (F-M5).
 DiscountSchema.statics.generateCode = function (length: number = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluding similar-looking characters (I, O, 0, 1, L)
   let code = '';
   for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(randomInt(0, chars.length));
   }
   return code;
 };
