@@ -56,5 +56,6 @@ export async function createPgUserSessionToken(userId: string): Promise<string |
     email: user.email,
     roles: user.roles,
     orgId: sessionOrgId || '',
+    tv: user.tokenVersion ?? 0,
   });
 }

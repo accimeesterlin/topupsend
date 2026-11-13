@@ -43,6 +43,11 @@ export async function PUT(
 
     // Update password
     customer.passwordHash = newPassword; // Will be hashed by pre-save hook
+    // Revoke every outstanding session (F-M1), including the one
+    // used for this request: a password change must end sessions an
+    // attacker may hold. The client signs in again with the new
+    // password.
+    customer.tokenVersion = (customer.tokenVersion ?? 0) + 1;
     await customer.save();
 
     return createSuccessResponse({

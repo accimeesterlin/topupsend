@@ -12,8 +12,8 @@ import crypto from 'crypto';
  *
  * The cookie is short-lived (10 minutes), httpOnly, and HMAC-signed
  * with the app's session secret — the same JWT_SECRET src/lib/auth.ts
- * signs session tokens with, fallback included, so the two trust
- * roots stay one. Single-use: the callback clears it on every
+ * signs session tokens with, so the two trust roots stay one.
+ * Single-use: the callback clears it on every
  * terminal outcome, success or failure.
  */
 
@@ -30,8 +30,17 @@ export interface PgSsoStatePayload {
 }
 
 function getStateSecret(): string {
-  // Same secret (and same development fallback) as src/lib/auth.ts.
-  return process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+  // Same secret as src/lib/auth.ts — and, since F-C9, the same
+  // fail-closed posture: no fallback literal. An unset JWT_SECRET
+  // aborts the SSO flow instead of HMAC-signing state with a secret
+  // printed in the source code.
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET environment variable is not set; refusing to sign or verify PG SSO state'
+    );
+  }
+  return secret;
 }
 
 export function signPgSsoState(payload: PgSsoStatePayload): string {

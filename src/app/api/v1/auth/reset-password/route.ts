@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
     user.passwordHash = passwordHash;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+    // Revoke every outstanding session (F-M1): tokens minted before
+    // this reset carry the old token version and now fail
+    // requireAuth's revalidation.
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     logger.info('Password reset successful', {

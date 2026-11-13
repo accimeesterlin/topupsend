@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     if (!enabled) {
       user.twoFactorCode = undefined;
       user.twoFactorCodeExpires = undefined;
+      user.twoFactorAttempts = 0;
+      user.twoFactorPendingId = undefined;
+      user.twoFactorPendingExpires = undefined;
     }
 
     await user.save();

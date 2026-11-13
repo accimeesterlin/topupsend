@@ -10,8 +10,19 @@ import { Org } from "@topupsend/db";
 import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
-import { createCustomerSession } from "@/lib/customer-auth";
+import {
+  createCustomerSession,
+  getCustomerJwtSecret,
+} from "@/lib/customer-auth";
 import { logger } from "@/lib/logger";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
+import {
+  CUSTOMER_PENDING_AUTH_COOKIE,
+  TWO_FACTOR_PENDING_TTL_MS,
+  createPendingAuthCookie,
+  newPendingAuthId,
+  signPendingAuthCookie,
+} from "@/lib/two-factor";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -25,6 +36,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const data = loginSchema.parse(body);
+
+    // Rate limit credential attempts per account + IP (F-M6)
+    const rateLimit = await checkAuthRateLimit(
+      "login",
+      `${data.orgSlug.toLowerCase()}:${data.email.toLowerCase()}`,
+      getClientIp(request),
+    );
+    if (!rateLimit.allowed) {
+      throw ApiErrors.TooManyRequests(
+        "Too many login attempts. Please try again later.",
+      );
+    }
 
     // Find organization by slug
     const org = await Org.findOne({ slug: data.orgSlug.toLowerCase() });
@@ -72,13 +95,42 @@ export async function POST(request: NextRequest) {
 
     // Check if 2FA is enabled
     if (customer.twoFactorEnabled) {
-      // Don't create session yet - require 2FA verification first
-      return createSuccessResponse({
+      // Don't create session yet - require 2FA verification first.
+      // The password step passed: create the server-side pending-auth
+      // state the 2FA send/verify endpoints will require (F-H1). The
+      // browser carries only an HMAC-signed cookie naming this state.
+      const pendingId = newPendingAuthId();
+      const pendingExpires = new Date(
+        Date.now() + TWO_FACTOR_PENDING_TTL_MS,
+      );
+      customer.twoFactorPendingId = pendingId;
+      customer.twoFactorPendingExpires = pendingExpires;
+      customer.twoFactorAttempts = 0;
+      await customer.save();
+
+      const response = createSuccessResponse({
         message: "Password verified. Two-factor authentication required.",
         requires2FA: true,
         email: customer.email,
         orgSlug: data.orgSlug,
       });
+
+      response.headers.append(
+        "Set-Cookie",
+        createPendingAuthCookie(
+          CUSTOMER_PENDING_AUTH_COOKIE,
+          signPendingAuthCookie(
+            {
+              sub: String(customer._id),
+              jti: pendingId,
+              exp: pendingExpires.getTime(),
+            },
+            getCustomerJwtSecret(),
+          ),
+        ),
+      );
+
+      return response;
     }
 
     // Create session (only if 2FA is not enabled)
@@ -94,6 +146,7 @@ export async function POST(request: NextRequest) {
       email: customer.email!,
       emailVerified: customer.emailVerified,
       name: customer.name,
+      tv: customer.tokenVersion ?? 0,
     });
 
     // Explicitly set cookie on the response to ensure it's included

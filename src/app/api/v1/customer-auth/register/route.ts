@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
       email: customer.email!,
       emailVerified: false,
       name: customer.name,
+      tv: customer.tokenVersion ?? 0,
     });
 
     // Explicitly set cookie on the response to ensure it's included

@@ -57,6 +57,10 @@ export async function POST(request: NextRequest) {
     customer.passwordHash = data.password; // Will be hashed by pre-save hook
     customer.resetPasswordToken = undefined;
     customer.resetPasswordTokenExpiry = undefined;
+    // Revoke every outstanding session (F-M1): tokens minted before
+    // this reset carry the old token version and now fail
+    // requireCustomerAuth's revalidation.
+    customer.tokenVersion = (customer.tokenVersion ?? 0) + 1;
     await customer.save();
 
     return createSuccessResponse({

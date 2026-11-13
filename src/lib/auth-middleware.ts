@@ -5,6 +5,8 @@ import { UserRole } from "@topupsend/types";
 import {
   ApiKey,
   Customer,
+  User,
+  dbConnection,
   type ApiKeyScope,
   type IApiKey,
 } from "@topupsend/db";
@@ -34,6 +36,13 @@ export interface CustomerAuthPayload {
 
 /**
  * Require authentication for a route
+ *
+ * F-M1: the JWT is revalidated against the user record on every
+ * call. A session dies immediately when the user is deactivated or
+ * when the record's tokenVersion has moved past the version minted
+ * into the token (password reset/change, role change, org-member
+ * removal, logout) — instead of living out its 7-day expiry with
+ * whatever roles it was minted with.
  */
 export async function requireAuth(
   request: NextRequest,
@@ -49,6 +58,21 @@ export async function requireAuth(
 
   if (!session) {
     throw ApiErrors.Unauthorized("Invalid or expired session");
+  }
+
+  await dbConnection.connect();
+  const user = await User.findById(session.userId).select(
+    "isActive tokenVersion",
+  );
+
+  if (!user || !user.isActive) {
+    throw ApiErrors.Unauthorized("Session is no longer valid");
+  }
+
+  if ((session.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    throw ApiErrors.Unauthorized(
+      "Session has been revoked. Please sign in again",
+    );
   }
 
   return session;
@@ -196,6 +220,32 @@ export async function requireApiKeyWithScope(
 }
 
 /**
+ * F-M1 revalidation for customer sessions: the customer must still
+ * exist and the token's version must still match the record's
+ * tokenVersion (password reset/change and logout bump it).
+ */
+async function revalidateCustomerSession<
+  T extends { customerId: string; tv?: number },
+>(session: T): Promise<T> {
+  await dbConnection.connect();
+  const customer = await Customer.findById(session.customerId).select(
+    "tokenVersion",
+  );
+
+  if (!customer) {
+    throw ApiErrors.Unauthorized("Customer authentication required");
+  }
+
+  if ((session.tv ?? 0) !== (customer.tokenVersion ?? 0)) {
+    throw ApiErrors.Unauthorized(
+      "Session has been revoked. Please sign in again",
+    );
+  }
+
+  return session;
+}
+
+/**
  * Require customer authentication (separate from staff auth)
  * This validates customer JWT tokens
  */
@@ -212,7 +262,7 @@ export async function requireCustomerAuth(_request: NextRequest): Promise<{
     throw ApiErrors.Unauthorized("Customer authentication required");
   }
 
-  return session;
+  return revalidateCustomerSession(session);
 }
 
 /**
@@ -248,7 +298,7 @@ export async function requireCustomerAuthOrApiKey(
   const session = await getCustomerSession();
 
   if (session) {
-    return session;
+    return revalidateCustomerSession(session);
   }
 
   const { apiKey } = await requireApiKeyWithScope(request, "customer:read");
