@@ -258,7 +258,30 @@ const TransactionSchema = new Schema<ITransaction>(
 TransactionSchema.index({ orgId: 1, status: 1, createdAt: -1 });
 TransactionSchema.index({ "recipient.phoneNumber": 1 });
 TransactionSchema.index({ createdAt: -1 });
-TransactionSchema.index({ paymentGateway: 1, paymentId: 1 });
+// Idempotency keys (F-H12): a gateway payment id and a provider
+// transaction id may each identify at most ONE transaction. Partial
+// indexes so the many transactions without these ids don't collide.
+TransactionSchema.index(
+  { paymentGateway: 1, paymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { paymentId: { $type: "string" } },
+  },
+);
+TransactionSchema.index(
+  { providerTransactionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { providerTransactionId: { $type: "string" } },
+  },
+);
+TransactionSchema.index(
+  { "metadata.pgpayToken": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "metadata.pgpayToken": { $type: "string" } },
+  },
+);
 TransactionSchema.index({ createdBy: 1, createdAt: -1 });
 TransactionSchema.index({ orgId: 1, createdBy: 1, status: 1 });
 TransactionSchema.index({ orgId: 1, paymentType: 1 });

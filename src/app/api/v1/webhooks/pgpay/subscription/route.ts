@@ -1,12 +1,25 @@
 import { NextRequest } from "next/server";
-import { dbConnection, Organization } from "@topupsend/db";
+import { dbConnection, Organization, WebhookLog } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { PGPayService } from "@/lib/services/pgpay.service";
 import { SubscriptionTier } from "@/lib/pricing";
+import {
+  checkSubscriptionBinding,
+  isVerificationCompleted,
+  pgpayEventId,
+} from "@/lib/services/pgpay-binding";
+import { webhookLoggingService } from "@/lib/services/webhook-logging.service";
 
 /**
  * PGPay Webhook Handler for Subscription Payments
  * Called by PGPay when a payment status changes
+ *
+ * SECURITY (F-C3): success is determined ONLY from the server-to-server
+ * PGPay verification — the webhook body's `status` field is attacker-
+ * controlled and is never consulted. Activation additionally requires
+ * confirmation binding (F-C2/F-C4): the verified token must equal the
+ * pending upgrade's stored token and the verified amount must equal
+ * the stored upgrade amount.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -14,13 +27,21 @@ export async function POST(req: NextRequest) {
     await dbConnection.connect();
 
     const body = await req.json();
-    const { pgPayToken, status, orderId } = body;
+    const { pgPayToken, orderId } = body as {
+      pgPayToken?: string;
+      orderId?: string;
+      // NOTE: body.status is deliberately not read — see header comment.
+      [key: string]: unknown;
+    };
 
     console.log("PGPay subscription webhook received:", {
       orderId,
-      status,
       token: pgPayToken?.substring(0, 10) + "...",
     });
+
+    if (!pgPayToken) {
+      return createErrorResponse("Missing pgPayToken", 400);
+    }
 
     // Verify payment with PGPay
     const pgPayUserId = process.env.PGPAY_USER_ID;
@@ -42,13 +63,22 @@ export async function POST(req: NextRequest) {
 
     const verification = await pgPayService.verifyPayment({ pgPayToken });
 
-    // Find organization with pending upgrade
-    const organization = await Organization.findOne({
-      "subscription.pendingUpgrade.orderId": orderId,
-    });
+    // Find the organization whose pending upgrade this payment belongs
+    // to — by its stored token first, then by its stored orderId.
+    const organization =
+      (await Organization.findOne({
+        "subscription.pendingUpgrade.token": pgPayToken,
+      })) ||
+      (orderId
+        ? await Organization.findOne({
+            "subscription.pendingUpgrade.orderId": orderId,
+          })
+        : null);
 
     if (!organization) {
-      console.error("Organization not found for orderId:", orderId);
+      console.error("Organization not found for subscription webhook", {
+        orderId,
+      });
       return createErrorResponse("Organization not found", 404);
     }
 
@@ -58,34 +88,79 @@ export async function POST(req: NextRequest) {
       return createErrorResponse("No pending upgrade found", 404);
     }
 
-    // Check if payment is successful (be flexible with status values)
-    const statusValue = String(verification.status || "").toLowerCase();
-    const paymentStatusValue = String(
-      verification.paymentStatus || "",
-    ).toLowerCase();
+    // Webhook event log with a real event id (F-H12) + dedupe.
+    const eventId = pgpayEventId(pgPayToken);
+    const alreadyProcessed = await WebhookLog.findOne({
+      source: "pgpay",
+      eventId,
+      status: "success",
+    }).catch(() => null);
+    if (alreadyProcessed) {
+      return createSuccessResponse({
+        message: "Webhook event already processed",
+      });
+    }
+    const webhookLog = await webhookLoggingService
+      .logIncoming({
+        orgId: organization._id?.toString() as string,
+        event: "subscription.webhook",
+        source: "pgpay",
+        eventId,
+        payload: body,
+      })
+      .catch(() => null);
+    const finishLog = async (ok: boolean, errorMessage?: string) => {
+      if (!webhookLog?._id) return;
+      try {
+        if (ok) {
+          await webhookLoggingService.markSuccess(webhookLog._id.toString());
+        } else {
+          await webhookLoggingService.markFailed(
+            webhookLog._id.toString(),
+            errorMessage || "Webhook processing failed",
+          );
+        }
+      } catch {
+        // Logging must never break webhook processing.
+      }
+    };
 
-    const isStatusCompleted =
-      statusValue === "completed" ||
-      statusValue === "success" ||
-      statusValue === "succeeded" ||
-      statusValue === "paid";
+    // Success comes from the verified provider state ONLY.
+    if (isVerificationCompleted(verification)) {
+      // Confirmation binding BEFORE any activation.
+      const binding = checkSubscriptionBinding({
+        organization,
+        pgPayToken,
+        orderId,
+        verification,
+      });
+      if (!binding.ok) {
+        console.error(
+          "Subscription webhook binding failed - refusing to activate",
+          {
+            organizationId: organization._id?.toString(),
+            reason: binding.reason,
+            verifiedAmount: verification.amount,
+            expectedAmount: pendingUpgrade.amount,
+          },
+        );
+        await finishLog(false, `Binding failed: ${binding.reason}`);
+        return createErrorResponse(
+          "Payment confirmation does not match the pending upgrade",
+          400,
+        );
+      }
 
-    const isPaymentPaid =
-      paymentStatusValue === "paid" ||
-      paymentStatusValue === "success" ||
-      paymentStatusValue === "succeeded" ||
-      paymentStatusValue === "completed";
-
-    if (isStatusCompleted || isPaymentPaid || status === "completed") {
       const newTier = pendingUpgrade.tier as SubscriptionTier;
       const months = pendingUpgrade.months || 1;
 
       // Calculate subscription end date based on months paid
       const daysToAdd = months * 30;
+      const periodEnd = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
 
       // Update organization subscription
       const paymentRecord = {
-        orderId,
+        orderId: pendingUpgrade.orderId || orderId,
         tier: newTier,
         amount: verification.amount,
         months,
@@ -98,9 +173,7 @@ export async function POST(req: NextRequest) {
           subscriptionTier: newTier,
           "subscription.status": "active",
           "subscription.currentPeriodStart": new Date(),
-          "subscription.currentPeriodEnd": new Date(
-            Date.now() + daysToAdd * 24 * 60 * 60 * 1000,
-          ),
+          "subscription.currentPeriodEnd": periodEnd,
           "subscription.prepaidMonths": months,
           "subscription.lastPayment": paymentRecord,
         },
@@ -115,22 +188,24 @@ export async function POST(req: NextRequest) {
         orderId,
       });
 
+      await finishLog(true);
       return createSuccessResponse({
         message: "Subscription upgraded successfully",
         tier: newTier,
       });
-    } else {
-      // Payment failed or pending
-      await Organization.findByIdAndUpdate(organization._id, {
-        "subscription.pendingUpgrade.status": verification.status,
-        "subscription.pendingUpgrade.lastChecked": new Date(),
-      });
-
-      return createSuccessResponse({
-        message: "Payment status updated",
-        status: verification.status,
-      });
     }
+
+    // Payment failed or pending — record the verified status only.
+    await Organization.findByIdAndUpdate(organization._id, {
+      "subscription.pendingUpgrade.status": verification.status,
+      "subscription.pendingUpgrade.lastChecked": new Date(),
+    });
+
+    await finishLog(true);
+    return createSuccessResponse({
+      message: "Payment status updated",
+      status: verification.status,
+    });
   } catch (error: any) {
     console.error("Error processing PGPay subscription webhook:", error);
     return createErrorResponse(

@@ -24,6 +24,10 @@ export interface IOrganization extends Document {
       months: number;
       orderId: string;
       token: string;
+      // Server-derived amount charged for this upgrade. Payment
+      // confirmations are bound to it (verified amount must equal it)
+      // before any activation — see F-C2/F-C4.
+      amount?: number;
       status?: string;
       createdAt: Date;
       expiresAt: Date;
@@ -148,6 +152,7 @@ const OrganizationSchema = new Schema<IOrganization>(
         months: { type: Number },
         orderId: { type: String, index: true },
         token: { type: String },
+        amount: { type: Number },
         status: { type: String },
         createdAt: { type: Date },
         expiresAt: { type: Date },
