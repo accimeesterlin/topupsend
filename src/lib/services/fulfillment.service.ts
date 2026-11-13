@@ -13,9 +13,14 @@ import {
   Customer,
   Integration,
   StorefrontSettings,
+  Transaction,
   type ITransaction,
 } from "@topupsend/db";
-import { createDingConnectService } from "@/lib/services/dingconnect.service";
+import {
+  createDingConnectService,
+  type DingConnectService,
+  type SendTransferResponse,
+} from "@/lib/services/dingconnect.service";
 import { logger } from "@/lib/logger";
 import { trackTransactionCompletion } from "@/lib/services/usage-tracking.service";
 import { processRefund } from "@/lib/services/refund.service";
@@ -46,7 +51,20 @@ export type FulfillmentResult =
       userMessage: string;
       failureReason: string;
       isInsufficientBalance: boolean;
-    };
+    }
+  /**
+   * The transaction was not fulfilled because it is not in "paid"
+   * status (already claimed by another caller, already completed, or
+   * refunded — refunded orders are NEVER fulfilled). No state changed.
+   */
+  | { outcome: "skipped"; reason: string }
+  /**
+   * The provider accepted (or may have accepted) the transfer but its
+   * final outcome is not yet known. The transaction stays in
+   * "processing" for the reconciliation sweep to settle — it is NOT
+   * marked completed and NOT refunded (Cluster 1e, F-H6/F-H7).
+   */
+  | { outcome: "pending-verification"; status: ITransaction["status"] };
 
 /**
  * Find or create/update a customer record from a transaction.
@@ -187,6 +205,91 @@ async function handleCompletionSideEffects(
 }
 
 /**
+ * Atomically claim a paid transaction for fulfillment (Cluster 1c).
+ * Exactly one caller can move a transaction paid → processing; every
+ * other caller gets null. This replaces the check-then-act status
+ * reads that allowed duplicate delivery (F-C7).
+ */
+export async function claimTransactionForFulfillment(
+  transactionId: string,
+): Promise<ITransaction | null> {
+  return Transaction.findOneAndUpdate(
+    { _id: transactionId, status: "paid" },
+    {
+      $set: {
+        status: "processing",
+        "timeline.processingAt": new Date(),
+      },
+    },
+    { new: true },
+  );
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Poll DingConnect for a transfer's final status (Cluster 1e). Returns
+ * the last seen response once it reaches a terminal state, or the last
+ * non-terminal response after the attempts run out.
+ */
+export async function pollTransferStatus(
+  dingConnect: DingConnectService,
+  transferId: number,
+  attempts = 3,
+  intervalMs = 2000,
+): Promise<SendTransferResponse> {
+  let last = await dingConnect.getTransferStatus(transferId);
+  for (let i = 1; i < attempts; i++) {
+    if (last.Status === "Completed" || last.Status === "Failed") {
+      return last;
+    }
+    await sleep(intervalMs);
+    last = await dingConnect.getTransferStatus(transferId);
+  }
+  return last;
+}
+
+/**
+ * Whether a sendTransfer error definitively proves the provider did
+ * NOT accept the transfer. Only an HTTP 4xx response from DingConnect
+ * itself qualifies — timeouts, network errors, 5xx and parse failures
+ * can all occur after acceptance and must be treated as "unknown"
+ * (F-H7), never as "failed — refund".
+ */
+export function isDefiniteProviderRejection(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /DingConnect API Error: 4\d{2}\b/.test(message);
+}
+
+/**
+ * Run post-completion bookkeeping, isolating its failures: once a
+ * transfer is known to be delivered, a bookkeeping error must never
+ * reroute the order into the refund path (F-H7). The transaction's
+ * terminal state is persisted BEFORE this runs.
+ */
+async function safeCompletionSideEffects(
+  transaction: ITransaction,
+  storefrontSettings: Parameters<typeof updateStorefrontMetadata>[0],
+  maskedPhone: string,
+): Promise<void> {
+  try {
+    await handleCompletionSideEffects(
+      transaction,
+      storefrontSettings,
+      maskedPhone,
+    );
+  } catch (error) {
+    logger.error(
+      "Post-completion bookkeeping failed (transfer already delivered; not refunding)",
+      {
+        orderId: transaction.orderId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+    );
+  }
+}
+
+/**
  * Fulfill a transaction whose payment has been confirmed.
  *
  * The transaction is expected to already be in "paid" status (the caller
@@ -199,6 +302,39 @@ export async function fulfillPaidTransaction(
 ): Promise<FulfillmentResult> {
   const { transaction, refundSource } = params;
   const pgpayMetadata = params.pgpayMetadata;
+
+  // Cluster 1c: only a "paid" transaction may be fulfilled, and only
+  // by the one caller that wins the atomic claim. A refunded order is
+  // refused outright — replayed webhooks must never re-deliver it.
+  if (transaction.status !== "paid") {
+    logger.info("Fulfillment skipped - transaction is not in paid status", {
+      orderId: transaction.orderId,
+      status: transaction.status,
+    });
+    return {
+      outcome: "skipped",
+      reason: `Transaction status is "${transaction.status}", not "paid"`,
+    };
+  }
+
+  const claimed = await claimTransactionForFulfillment(
+    transaction._id?.toString() as string,
+  );
+  if (!claimed) {
+    logger.info(
+      "Fulfillment skipped - claim lost to a concurrent fulfillment",
+      { orderId: transaction.orderId },
+    );
+    return {
+      outcome: "skipped",
+      reason: "Transaction was already claimed for fulfillment",
+    };
+  }
+
+  // Sync the caller's in-memory document with the claimed state.
+  transaction.status = "processing";
+  transaction.timeline.processingAt =
+    claimed.timeline.processingAt || new Date();
 
   // Get DingConnect integration to send top-up
   const integration = await Integration.findOne({
@@ -250,10 +386,8 @@ export async function fulfillPaidTransaction(
     apiKey: integration.credentials.apiKey as string,
   });
 
-  // Send top-up via DingConnect
-  transaction.status = "processing";
-  transaction.timeline.processingAt = new Date();
-  await transaction.save();
+  // The transaction was already moved to "processing" by the atomic
+  // claim at entry and the in-memory document is in sync with it.
 
   try {
     const validateOnly =
@@ -504,16 +638,54 @@ export async function fulfillPaidTransaction(
         validateOnly: true,
       });
 
-      await handleCompletionSideEffects(
+      // Persist the terminal state BEFORE bookkeeping so a bookkeeping
+      // failure can never reroute a delivered transfer into a refund.
+      await transaction.save();
+
+      await safeCompletionSideEffects(
         transaction,
         storefrontSettings,
         maskedPhone,
       );
     } else {
       // Production mode - call actual DingConnect API
-      const transferResult = await dingConnect.sendTransfer(
-        transferRequest as any,
-      );
+      let transferResult: SendTransferResponse;
+      try {
+        transferResult = await dingConnect.sendTransfer(
+          transferRequest as any,
+        );
+      } catch (sendError) {
+        if (!isDefiniteProviderRejection(sendError)) {
+          // Unknown outcome (timeout / network / 5xx): the provider may
+          // have accepted the transfer. Never refund and never mark
+          // completed — stay in "processing" for the reconciliation
+          // sweep to settle (F-H7).
+          (transaction.metadata as Record<string, unknown>).transferOutcome =
+            "unknown";
+          transaction.metadata.failureReason =
+            "DingConnect request outcome unknown (possible timeout); awaiting status verification";
+          await transaction.save();
+
+          logger.error(
+            "DingConnect send outcome unknown - left in processing for reconciliation",
+            {
+              orderId: transaction.orderId,
+              error:
+                sendError instanceof Error
+                  ? sendError.message
+                  : "Unknown error",
+            },
+          );
+
+          return {
+            outcome: "pending-verification",
+            status: transaction.status,
+          };
+        }
+        // Definite rejection (HTTP 4xx from DingConnect): nothing was
+        // sent — fall through to the refund path in the outer catch.
+        throw sendError;
+      }
 
       logger.info("DingConnect transfer result", {
         orderId: transaction.orderId,
@@ -524,88 +696,85 @@ export async function fulfillPaidTransaction(
       // Update transaction with provider details
       transaction.providerTransactionId = transferResult.TransferId?.toString();
 
-      if (transferResult.Status === "Completed") {
+      // Honest outcomes (Cluster 1e, F-H6): only a provider "Completed"
+      // may complete the order. "Processing" and unknown statuses are
+      // polled for their final state; if still unresolved, the order
+      // stays in "processing" — never completed, never refunded.
+      let finalResult = transferResult;
+      if (
+        transferResult.Status !== "Completed" &&
+        transferResult.Status !== "Failed"
+      ) {
+        finalResult = await pollTransferStatus(
+          dingConnect,
+          Number(transferResult.TransferId),
+        ).catch(() => transferResult);
+
+        if (
+          finalResult.Status !== "Completed" &&
+          finalResult.Status !== "Failed"
+        ) {
+          (transaction.metadata as Record<string, unknown>).transferOutcome =
+            "unknown";
+          (
+            transaction.metadata as Record<string, unknown>
+          ).dingconnectStatus = finalResult.Status;
+          await transaction.save();
+
+          logger.warn(
+            "DingConnect transfer not yet final - left in processing for reconciliation",
+            {
+              orderId: transaction.orderId,
+              status: finalResult.Status,
+              transferId: transferResult.TransferId,
+            },
+          );
+
+          return {
+            outcome: "pending-verification",
+            status: transaction.status,
+          };
+        }
+      }
+
+      if (finalResult.Status === "Completed") {
         transaction.status = "completed";
         transaction.timeline.completedAt = new Date();
 
         logger.info("Transaction completed successfully", {
           orderId: transaction.orderId,
-          transferId: transferResult.TransferId,
+          transferId: finalResult.TransferId,
           validateOnly: false,
         });
 
-        await handleCompletionSideEffects(
+        // Persist the terminal state BEFORE bookkeeping (F-H7).
+        await transaction.save();
+
+        await safeCompletionSideEffects(
           transaction,
           storefrontSettings,
           maskedPhone,
         );
-      } else if (transferResult.Status === "Failed") {
+      } else {
+        // finalResult.Status === "Failed" — the provider definitively
+        // rejected the transfer, so the payment is refunded.
         const failureReason =
-          transferResult.ErrorMessage || "Unknown DingConnect error";
+          finalResult.ErrorMessage || "Unknown DingConnect error";
 
         logger.error("Transaction failed at DingConnect - processing refund", {
           orderId: transaction.orderId,
-          errorMessage: transferResult.ErrorMessage,
-          errorCode: transferResult.ErrorCode,
+          errorMessage: finalResult.ErrorMessage,
+          errorCode: finalResult.ErrorCode,
         });
 
         await processRefund({
           transaction,
           failureReason,
           additionalMetadata: {
-            dingconnectErrorCode: transferResult.ErrorCode,
+            dingconnectErrorCode: finalResult.ErrorCode,
             refundSource,
           },
         });
-      } else if (transferResult.Status === "Processing") {
-        // DingConnect is still processing - mark as completed anyway
-        // DingConnect is reliable and will complete the top-up
-        transaction.status = "completed";
-        transaction.timeline.completedAt = new Date();
-        (transaction.metadata as Record<string, unknown>).dingconnectStatus =
-          transferResult.Status;
-        (transaction.metadata as Record<string, unknown>).processingNote =
-          "Marked as completed while DingConnect processes the transfer";
-
-        logger.info(
-          "Transaction marked as completed (DingConnect still processing)",
-          {
-            orderId: transaction.orderId,
-            transferId: transferResult.TransferId,
-            status: transferResult.Status,
-            message:
-              "DingConnect will complete the transfer - marking transaction as completed for customer",
-          },
-        );
-
-        await handleCompletionSideEffects(
-          transaction,
-          storefrontSettings,
-          maskedPhone,
-        );
-      } else {
-        // Unknown status - mark as completed to avoid blocking customer
-        // Log the unknown status for monitoring
-        transaction.status = "completed";
-        transaction.timeline.completedAt = new Date();
-        (transaction.metadata as Record<string, unknown>).dingconnectStatus =
-          transferResult.Status;
-        (transaction.metadata as Record<string, unknown>).unknownStatusNote =
-          "Completed despite unknown DingConnect status - requires manual verification";
-
-        logger.warn("Unknown DingConnect status - marking as completed", {
-          orderId: transaction.orderId,
-          transferId: transferResult.TransferId,
-          status: transferResult.Status,
-          message:
-            "Unexpected status from DingConnect API - marking as completed for customer, but requires manual verification",
-        });
-
-        await handleCompletionSideEffects(
-          transaction,
-          storefrontSettings,
-          maskedPhone,
-        );
       }
     }
 
@@ -667,4 +836,109 @@ export async function fulfillPaidTransaction(
       isInsufficientBalance,
     };
   }
+}
+
+export type SettleStuckTransferResult =
+  | "completed"
+  | "refunded"
+  | "unknown"
+  | "skipped";
+
+/**
+ * Settle a transaction stuck in "processing" by asking the provider
+ * for the transfer's actual final state (Cluster 1d/1e). Used by the
+ * reconciliation sweep for orders whose send outcome was unknown.
+ *
+ * Completed → the terminal state is persisted, then completion
+ * bookkeeping runs (isolated). Failed → the payment is refunded.
+ * Anything else → the order stays in "processing" for the next sweep.
+ */
+export async function settleStuckTransfer(
+  transaction: ITransaction,
+): Promise<SettleStuckTransferResult> {
+  if (
+    transaction.status !== "processing" ||
+    !transaction.providerTransactionId
+  ) {
+    return "skipped";
+  }
+
+  const transferId = Number(transaction.providerTransactionId);
+  if (!Number.isFinite(transferId)) {
+    // Non-numeric ids (e.g. TEST-...) are not provider transfers.
+    return "skipped";
+  }
+
+  const integration = await Integration.findOne({
+    orgId: transaction.orgId,
+    provider: "dingconnect",
+    status: "active",
+  }).select("+credentials.apiKey");
+
+  if (!integration?.credentials?.apiKey) {
+    logger.warn("Cannot settle stuck transfer - no DingConnect integration", {
+      orderId: transaction.orderId,
+    });
+    return "skipped";
+  }
+
+  const storefrontSettings = await StorefrontSettings.findOne({
+    orgId: transaction.orgId,
+  });
+  if (!storefrontSettings) {
+    return "skipped";
+  }
+
+  const dingConnect = createDingConnectService({
+    apiKey: integration.credentials.apiKey as string,
+  });
+
+  let finalResult: SendTransferResponse;
+  try {
+    finalResult = await dingConnect.getTransferStatus(transferId);
+  } catch (error) {
+    logger.warn("Failed to poll stuck transfer status", {
+      orderId: transaction.orderId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return "unknown";
+  }
+
+  if (finalResult.Status === "Completed") {
+    transaction.status = "completed";
+    transaction.timeline.completedAt = new Date();
+    (transaction.metadata as Record<string, unknown>).transferOutcome =
+      "completed";
+    await transaction.save();
+
+    const phoneNumber = transaction.recipient.phoneNumber || "";
+    const maskedPhone = phoneNumber
+      ? `${phoneNumber.slice(0, 4)}****${phoneNumber.slice(-2)}`
+      : "****";
+    await safeCompletionSideEffects(
+      transaction,
+      storefrontSettings,
+      maskedPhone,
+    );
+    return "completed";
+  }
+
+  if (finalResult.Status === "Failed") {
+    await processRefund({
+      transaction,
+      failureReason:
+        finalResult.ErrorMessage ||
+        "DingConnect transfer failed (confirmed by status poll)",
+      additionalMetadata: {
+        dingconnectErrorCode: finalResult.ErrorCode,
+        refundSource: "reconciliation_sweep",
+      },
+    });
+    return "refunded";
+  }
+
+  (transaction.metadata as Record<string, unknown>).dingconnectStatus =
+    finalResult.Status;
+  await transaction.save();
+  return "unknown";
 }

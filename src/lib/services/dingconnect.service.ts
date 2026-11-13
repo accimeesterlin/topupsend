@@ -168,14 +168,28 @@ export class DingConnectService {
 
     const requestBody = options.body;
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'api_key': this.config.apiKey,
-        ...options.headers,
-      },
-    });
+    // Hard 30s timeout on every provider call (Cluster 1e): without it
+    // a hung connection blocks fulfillment indefinitely and callers
+    // cannot distinguish "slow" from "stuck". A timeout surfaces as a
+    // fetch abort error — which callers must treat as an UNKNOWN
+    // outcome, never as a definite rejection.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'api_key': this.config.apiKey,
+          ...options.headers,
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       let errorDetails: any = { message: 'Unknown error' };

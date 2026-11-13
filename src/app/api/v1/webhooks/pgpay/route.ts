@@ -4,11 +4,18 @@ import {
   dbConnection,
   Transaction,
   PaymentProvider,
+  WebhookLog,
 } from "@topupsend/db";
 import { createPGPayService } from "@/lib/services/pgpay.service";
 import { logger } from "@/lib/logger";
 import { fulfillPaidTransaction } from "@/lib/services/fulfillment.service";
 import { isManuallyPaidTransaction } from "@/lib/services/manual-payment.service";
+import {
+  checkTransactionBinding,
+  isVerificationCompleted,
+  pgpayEventId,
+} from "@/lib/services/pgpay-binding";
+import { webhookLoggingService } from "@/lib/services/webhook-logging.service";
 
 /**
  * POST /api/v1/webhooks/pgpay
@@ -70,15 +77,98 @@ export async function POST(request: NextRequest) {
       currentStatus: transaction.status,
     });
 
+    // Webhook event log with a real event id (F-H12): the same PGPay
+    // payment always produces the same event id, so a delivery that was
+    // already processed successfully is acknowledged without re-running.
+    const eventId = pgpayEventId(pgPayToken);
+    const alreadyProcessed = await WebhookLog.findOne({
+      source: "pgpay",
+      eventId,
+      status: "success",
+    }).catch(() => null);
+    if (alreadyProcessed) {
+      logger.info("Duplicate PGPay webhook delivery - already processed", {
+        orderId: transaction.orderId,
+        eventId,
+      });
+      return createSuccessResponse({
+        success: true,
+        message: "Webhook event already processed",
+      });
+    }
+
+    const webhookLog = await webhookLoggingService
+      .logIncoming({
+        orgId: transaction.orgId,
+        event: "payment.webhook",
+        source: "pgpay",
+        eventId,
+        payload: webhookData,
+        transactionId: transaction._id?.toString(),
+      })
+      .catch((error) => {
+        logger.warn("Failed to write PGPay webhook log", {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        return null;
+      });
+    const finishLog = async (
+      ok: boolean,
+      errorMessage?: string,
+    ): Promise<void> => {
+      if (!webhookLog?._id) return;
+      try {
+        if (ok) {
+          await webhookLoggingService.markSuccess(webhookLog._id.toString());
+        } else {
+          await webhookLoggingService.markFailed(
+            webhookLog._id.toString(),
+            errorMessage || "Webhook processing failed",
+          );
+        }
+      } catch {
+        // Logging must never break webhook processing.
+      }
+    };
+
     // If already completed, skip processing (but allow retrying failed transactions)
     if (transaction.status === "completed") {
       logger.info("Transaction already completed", {
         orderId: transaction.orderId,
         status: transaction.status,
       });
+      await finishLog(true);
       return createSuccessResponse({
         success: true,
         message: "Transaction already completed",
+      });
+    }
+
+    // A refunded order must NEVER be fulfilled (F-C7/F-C8): a replayed
+    // or late webhook for a refunded order is acknowledged and dropped.
+    if (transaction.status === "refunded") {
+      logger.warn(
+        "PGPay webhook received for a refunded transaction - fulfillment refused",
+        { orderId: transaction.orderId },
+      );
+      await finishLog(true);
+      return createSuccessResponse({
+        success: true,
+        message: "Transaction was refunded; fulfillment refused",
+      });
+    }
+
+    // Fulfillment already claimed this order (by an earlier delivery or
+    // the reconciliation sweep): never reset it back to "paid".
+    if (transaction.status === "processing") {
+      logger.info(
+        "PGPay webhook received while fulfillment is in progress - skipping",
+        { orderId: transaction.orderId },
+      );
+      await finishLog(true);
+      return createSuccessResponse({
+        success: true,
+        message: "Fulfillment already in progress",
       });
     }
 
@@ -157,17 +247,22 @@ export async function POST(request: NextRequest) {
         orderId: transaction.orderId,
       });
 
-      transaction.status = "failed";
-      transaction.timeline.failedAt = new Date();
+      // A verification TRANSPORT failure proves nothing about the
+      // payment (F-C6): do not fail the order. Record the failure and
+      // leave the status for PGPay's retry and the reconciliation
+      // sweep, which re-verifies pending orders.
       transaction.metadata.failureReason =
         "Payment verification failed: " + errorMessage;
+      (transaction.metadata as Record<string, unknown>).lastVerificationError =
+        errorMessage;
       await transaction.save();
+      await finishLog(false, "Payment verification failed: " + errorMessage);
 
       return createErrorResponse("Payment verification failed", 500);
     }
 
-    // Check payment status
-    // Log what we're checking against
+    // Check payment status — from the server-to-server verification
+    // response only, never from the webhook body.
     logger.info("Checking payment status", {
       orderId: transaction.orderId,
       expectedStatus: "completed",
@@ -177,32 +272,23 @@ export async function POST(request: NextRequest) {
       allKeys: Object.keys(verificationResult),
     });
 
-    // Check if payment is completed (be flexible with status values)
-    const isStatusCompleted =
-      verificationResult.status?.toLowerCase() === "completed" ||
-      verificationResult.status?.toLowerCase() === "success" ||
-      verificationResult.status?.toLowerCase() === "succeeded";
-
-    const isPaymentPaid =
-      verificationResult.paymentStatus?.toLowerCase() === "paid" ||
-      verificationResult.paymentStatus?.toLowerCase() === "success" ||
-      verificationResult.paymentStatus?.toLowerCase() === "succeeded" ||
-      verificationResult.paymentStatus?.toLowerCase() === "completed";
-
-    if (!isStatusCompleted && !isPaymentPaid) {
+    if (!isVerificationCompleted(verificationResult)) {
       logger.warn("Payment not completed", {
         orderId: transaction.orderId,
         status: verificationResult.status,
         paymentStatus: verificationResult.paymentStatus,
-        isStatusCompleted,
-        isPaymentPaid,
       });
 
-      // Update transaction but don't fail yet - payment might still be processing
-      transaction.status = "pending";
+      // Payment might still be processing — keep the order pending for
+      // PGPay's next delivery and the reconciliation sweep. Never
+      // downgrade an already-paid order here.
+      if (transaction.status !== "paid") {
+        transaction.status = "pending";
+      }
       (transaction.metadata as Record<string, unknown>).lastWebhookCheck =
         new Date();
       await transaction.save();
+      await finishLog(true);
 
       return createSuccessResponse({
         success: true,
@@ -210,9 +296,37 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Confirmation binding (F-C4): the verified payment must be THIS
+    // order's payment — the presented token must equal the token stored
+    // on the transaction and the verified amount must equal the order
+    // amount. Anything else changes no state.
+    const binding = checkTransactionBinding({
+      transaction,
+      pgPayToken,
+      verification: verificationResult,
+    });
+    if (!binding.ok) {
+      logger.error("PGPay confirmation binding failed - refusing to fulfill", {
+        orderId: transaction.orderId,
+        reason: binding.reason,
+        verifiedAmount: verificationResult.amount,
+        orderAmount: transaction.amount,
+      });
+      await finishLog(false, `Binding failed: ${binding.reason}`);
+      return createErrorResponse(
+        "Payment confirmation does not match this order",
+        400,
+      );
+    }
+
     // Payment verified successfully - update transaction
-    transaction.status = "paid";
-    transaction.timeline.paidAt = new Date();
+    if (transaction.status !== "paid") {
+      transaction.status = "paid";
+      transaction.timeline.paidAt = new Date();
+    }
+    if (!transaction.paymentId && verificationResult.orderId) {
+      transaction.paymentId = verificationResult.orderId;
+    }
     (transaction.metadata as Record<string, unknown>).pgpayVerification =
       verificationResult;
     await transaction.save();
@@ -232,12 +346,42 @@ export async function POST(request: NextRequest) {
     });
 
     if (fulfillment.outcome === "configuration-error") {
+      await finishLog(false, fulfillment.errorMessage);
       return createErrorResponse(fulfillment.errorMessage, 500);
     }
 
     if (fulfillment.outcome === "refund-error") {
+      await finishLog(true);
       // Return generic customer-facing error (don't expose internal issues)
       return createErrorResponse(fulfillment.userMessage, 503);
+    }
+
+    await finishLog(true);
+
+    if (fulfillment.outcome === "skipped") {
+      // Another caller owns (or already finished) this fulfillment;
+      // the payment itself is confirmed, so acknowledge the webhook.
+      return createSuccessResponse({
+        success: true,
+        message: "Payment confirmed; fulfillment already handled",
+        data: {
+          orderId: transaction.orderId,
+          status: transaction.status,
+        },
+      });
+    }
+
+    if (fulfillment.outcome === "pending-verification") {
+      // The provider's answer is not final yet; the reconciliation
+      // sweep settles the order. Still a successful webhook.
+      return createSuccessResponse({
+        success: true,
+        message: "Payment confirmed; top-up delivery pending verification",
+        data: {
+          orderId: transaction.orderId,
+          status: transaction.status,
+        },
+      });
     }
 
     logger.info("Webhook processing completed successfully", {

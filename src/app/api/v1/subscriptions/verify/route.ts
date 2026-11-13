@@ -2,6 +2,10 @@ import { NextRequest } from "next/server";
 import { dbConnection, Organization } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { PGPayService } from "@/lib/services/pgpay.service";
+import {
+  checkSubscriptionBinding,
+  isVerificationCompleted,
+} from "@/lib/services/pgpay-binding";
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -10,6 +14,17 @@ export const revalidate = 0;
 /**
  * Verify subscription payment status
  * Called by the frontend after payment redirect
+ *
+ * SECURITY (F-C2): this endpoint is intentionally reachable without a
+ * staff session — it is polled by the buyer's browser on the public
+ * payment success page, which is shared with storefront customers.
+ * Safety therefore comes from confirmation binding, not session auth:
+ * activation happens ONLY when the PGPay-verified token equals the
+ * token stored on the organization's pending upgrade AND the verified
+ * amount equals the server-derived amount stored with it. A token
+ * that merely verifies as "completed" — for any other payment, any
+ * other organization, or any other amount — activates nothing, and
+ * payment metadata (organizationId, tier, months) is never trusted.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -31,7 +46,9 @@ export async function POST(req: NextRequest) {
       return createErrorResponse("Order ID or pgPayToken is required", 400);
     }
 
-    // Build flexible lookup: try orderId first, then token as fallback
+    // Build flexible lookup: try orderId first, then token as fallback.
+    // The organization is located ONLY from server-side records —
+    // never from payment metadata supplied through PGPay.
     const orConditions: any[] = [];
 
     if (orderId) {
@@ -45,17 +62,17 @@ export async function POST(req: NextRequest) {
       orConditions.push({ "subscription.pendingUpgrade.token": pgPayToken });
     }
 
-    let organization = orConditions.length
+    const organization = orConditions.length
       ? await Organization.findOne({ $or: orConditions })
       : null;
 
     let verification: any | null = null;
 
-    // If we have a PGPay token, verify with PGPay to get
-    // authoritative status + metadata (including organizationId).
+    // If we have a PGPay token, verify with PGPay to get the
+    // authoritative status.
     if (pgPayToken) {
       const pgPayUserId = process.env.PGPAY_USER_ID;
-    const pgPayApiKey = process.env.PGPAY_API_KEY;
+      const pgPayApiKey = process.env.PGPAY_API_KEY;
       const pgPayEnvironment =
         (process.env.PGPAY_ENVIRONMENT as "sandbox" | "production") ||
         "sandbox";
@@ -76,18 +93,6 @@ export async function POST(req: NextRequest) {
         verification = await pgPayService.verifyPayment({ pgPayToken });
       } catch (error: any) {
         console.error("PGPay verification failed:", error);
-      }
-
-      // If we still don't have an organization, but PGPay metadata
-      // contains organizationId, use that as a fallback lookup.
-      if (!organization && verification?.metadata?.organizationId) {
-        try {
-          organization = await Organization.findById(
-            verification.metadata.organizationId,
-          );
-        } catch (err) {
-          console.error("Failed to load organization by metadata orgId", err);
-        }
       }
     }
 
@@ -128,121 +133,79 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Check pending upgrade info (if any)
     const pendingUpgrade = organization.subscription?.pendingUpgrade;
 
-    // If we have a verification result, determine if payment is completed
-    // and activate the subscription immediately. This should take precedence
-    // over local pending state to avoid being stuck in "pending" when
-    // PGPay already marked the payment as completed.
-    if (verification) {
-      const status = String(verification.status || "").toLowerCase();
-      const paymentStatus = String(
-        verification.paymentStatus || "",
-      ).toLowerCase();
+    // Activate ONLY on a bound confirmation: verified-completed AND
+    // the presented token is this pending upgrade's token AND the
+    // verified amount equals the stored upgrade amount. Tier and
+    // months come from the server-side pending upgrade record only.
+    if (verification && isVerificationCompleted(verification)) {
+      const binding = checkSubscriptionBinding({
+        organization,
+        pgPayToken,
+        orderId,
+        verification,
+      });
 
-      const isStatusCompleted =
-        status === "completed" ||
-        status === "success" ||
-        status === "succeeded" ||
-        status === "paid";
-
-      const isPaymentPaid =
-        paymentStatus === "paid" ||
-        paymentStatus === "success" ||
-        paymentStatus === "succeeded" ||
-        paymentStatus === "completed";
-
-      if (isStatusCompleted || isPaymentPaid) {
-        const months =
-          (pendingUpgrade?.months as number | undefined) ||
-          (verification.metadata?.months as number | undefined) ||
-          1;
-        const daysToAdd = months * 30;
-
-        const effectiveTier =
-          pendingUpgrade?.tier ||
-          verification.metadata?.tier ||
-          organization.subscriptionTier;
-
-        const paymentRecord = {
-          orderId: orderId || verification.orderId,
-          tier: effectiveTier,
-          amount: verification.amount,
-          months,
-          status: "completed" as const,
-          paidAt: new Date(),
-        };
-
-        await Organization.findByIdAndUpdate(organization._id, {
-          $set: {
-            subscriptionTier: effectiveTier,
-            "subscription.status": "active",
-            "subscription.currentPeriodStart": new Date(),
-            "subscription.currentPeriodEnd": new Date(
-              Date.now() + daysToAdd * 24 * 60 * 60 * 1000,
-            ),
-            "subscription.prepaidMonths": months,
-            "subscription.lastPayment": paymentRecord,
-          },
-          $unset: { "subscription.pendingUpgrade": "" },
-          $push: { "subscription.paymentHistory": paymentRecord },
+      if (!binding.ok) {
+        console.warn("Subscription activation refused - binding failed", {
+          organizationId: organization._id?.toString(),
+          reason: binding.reason,
         });
-
-        console.log(
-          "Subscription activated:",
-          effectiveTier,
-          "for",
-          months,
-          "months",
-        );
-
         return createSuccessResponse({
           success: true,
-          status: "completed",
-          tier: effectiveTier,
-          currentPeriodEnd: new Date(
-            Date.now() + daysToAdd * 24 * 60 * 60 * 1000,
-          ),
-          prepaidMonths: months,
-          message: "Subscription activated successfully",
+          status: "pending",
+          message:
+            "Payment is being processed. Please wait a moment and refresh.",
         });
       }
-    }
 
-    // If we reach here, payment is not confirmed as completed yet.
-    // Check whether we still have a matching pending upgrade; if not,
-    // treat as pending so the frontend keeps polling.
-    const matchesPendingUpgrade = pendingUpgrade
-      ? pendingUpgrade.orderId === orderId ||
-        (!!pgPayToken && pendingUpgrade.token === pgPayToken)
-      : false;
+      const months = (pendingUpgrade?.months as number | undefined) || 1;
+      const daysToAdd = months * 30;
+      const effectiveTier = pendingUpgrade?.tier || organization.subscriptionTier;
+      const periodEnd = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
 
-    if (!pendingUpgrade || !matchesPendingUpgrade) {
-      console.log(
-        "No matching pending upgrade found yet; treating as pending",
-        {
-          orderId,
-          hasPendingUpgrade: !!pendingUpgrade,
-          matchesPendingUpgrade,
+      const paymentRecord = {
+        orderId: pendingUpgrade?.orderId || orderId || verification.orderId,
+        tier: effectiveTier,
+        amount: verification.amount,
+        months,
+        status: "completed" as const,
+        paidAt: new Date(),
+      };
+
+      await Organization.findByIdAndUpdate(organization._id, {
+        $set: {
+          subscriptionTier: effectiveTier,
+          "subscription.status": "active",
+          "subscription.currentPeriodStart": new Date(),
+          "subscription.currentPeriodEnd": periodEnd,
+          "subscription.prepaidMonths": months,
+          "subscription.lastPayment": paymentRecord,
         },
+        $unset: { "subscription.pendingUpgrade": "" },
+        $push: { "subscription.paymentHistory": paymentRecord },
+      });
+
+      console.log(
+        "Subscription activated:",
+        effectiveTier,
+        "for",
+        months,
+        "months",
       );
 
       return createSuccessResponse({
         success: true,
-        status: "pending",
-        message:
-          "Payment is being processed. Please wait a moment and refresh.",
-        debug: verification
-          ? {
-              status: verification.status,
-              paymentStatus: verification.paymentStatus,
-            }
-          : undefined,
+        status: "completed",
+        tier: effectiveTier,
+        currentPeriodEnd: periodEnd,
+        prepaidMonths: months,
+        message: "Subscription activated successfully",
       });
     }
 
-    // Still pending
+    // Payment not confirmed as completed (or not bound) yet.
     return createSuccessResponse({
       success: true,
       status: "pending",

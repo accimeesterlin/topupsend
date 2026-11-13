@@ -7,7 +7,9 @@
 
 import {
   Customer,
+  CustomerBalanceHistory,
   Organization,
+  Transaction,
   type ICustomer,
   type ITransaction,
 } from "@topupsend/db";
@@ -78,6 +80,38 @@ export async function processRefund(
     };
   }
 
+  // Atomic claim (Cluster 1f): exactly one caller may move a transaction
+  // into "refunded". A concurrent or repeated refund attempt loses the
+  // claim and is treated as already-refunded, so the balance credit can
+  // never be issued twice for the same order.
+  const claimed = await Transaction.findOneAndUpdate(
+    { _id: transaction._id, status: { $ne: "refunded" } },
+    {
+      $set: {
+        status: "refunded",
+        "timeline.refundedAt": new Date(),
+      },
+    },
+    { new: true },
+  );
+
+  if (!claimed) {
+    logger.info(
+      "Transaction already refunded (atomic claim lost) - skipping balance refund",
+      { orderId },
+    );
+    transaction.status = "refunded";
+    return {
+      success: true,
+      balanceRefunded: false,
+      customerId: transaction.customerId || undefined,
+    };
+  }
+
+  // Keep the caller's in-memory document in sync with the claim.
+  transaction.status = "refunded";
+  transaction.timeline.refundedAt = claimed.timeline.refundedAt;
+
   logger.info("Processing refund for failed transaction", {
     orderId,
     transactionId: transaction._id?.toString(),
@@ -85,6 +119,11 @@ export async function processRefund(
     refundAmount,
     failureReason,
   });
+
+  // Tracks whether the balance credit landed, so a late failure cannot
+  // downgrade the transaction out of "refunded" and open a second
+  // refund (Cluster 1f).
+  let creditLanded = false;
 
   try {
     // Step 1: Find or create the customer record
@@ -153,6 +192,7 @@ export async function processRefund(
         );
 
         balanceRefunded = true;
+        creditLanded = true;
 
         logger.info("Customer balance refunded", {
           orderId,
@@ -181,10 +221,28 @@ export async function processRefund(
     }
 
     // Step 3: Update transaction status to "refunded"
+    // (already claimed atomically above; restated here for the caller's
+    // in-memory document and the remaining timeline/metadata fields)
     transaction.status = "refunded";
-    transaction.timeline.refundedAt = new Date();
+    transaction.timeline.refundedAt =
+      transaction.timeline.refundedAt || new Date();
     transaction.timeline.failedAt = transaction.timeline.failedAt || new Date();
     transaction.metadata.failureReason = failureReason;
+    // Record exactly what was credited and to whom, so a later retry of
+    // this order can reverse precisely this credit first (Cluster 1f).
+    // Only stamped when a credit actually landed.
+    if (balanceRefunded) {
+      const meta = transaction.metadata as Record<string, unknown>;
+      meta.refundedAmount = refundAmount;
+      // A fresh refund supersedes any earlier reversal bookkeeping, so
+      // a future retry reverses THIS credit (exactly once).
+      delete meta.refundReversedAt;
+      delete meta.refundReversedAmount;
+      delete meta.refundReversalShortfall;
+      if (customer) {
+        meta.refundCustomerId = customer._id?.toString();
+      }
+    }
 
     if (additionalMetadata) {
       Object.assign(transaction.metadata, additionalMetadata);
@@ -234,10 +292,14 @@ export async function processRefund(
       error: errorMessage,
     });
 
-    // Even if refund fails, mark the transaction failure
+    // Even if refund fails, mark the transaction failure — unless the
+    // credit already landed, in which case the refund stands and only
+    // the error is recorded (downgrading would enable a second refund).
     try {
-      transaction.status = "failed";
-      transaction.timeline.failedAt = new Date();
+      if (!creditLanded) {
+        transaction.status = "failed";
+        transaction.timeline.failedAt = new Date();
+      }
       transaction.metadata.failureReason = failureReason;
       (transaction.metadata as Record<string, unknown>).refundError =
         errorMessage;
@@ -255,6 +317,127 @@ export async function processRefund(
       error: errorMessage,
     };
   }
+}
+
+/** Result of a refund-credit reversal */
+export interface ReverseRefundCreditResult {
+  /** Whether this transaction had a refund credit to reverse */
+  reversed: boolean;
+  /** Amount actually taken back (may be less than credited if spent) */
+  reversedAmount: number;
+  /** Credited amount that could not be recovered (already spent) */
+  shortfall: number;
+  customerId?: string;
+}
+
+/**
+ * Reverse a previous refund credit for a transaction (Cluster 1f).
+ *
+ * Retrying a refunded order must not leave the customer with both the
+ * refund credit and the re-sent top-up (F-C8). Callers invoke this
+ * after claiming a refunded transaction for retry and BEFORE sending
+ * again. The reversal is idempotent: it runs at most once per refund,
+ * tracked by metadata.refundReversedAt.
+ *
+ * Legacy refunds (processed before refundedAmount was recorded) fall
+ * back to the full transaction amount.
+ */
+export async function reverseRefundCredit(
+  transaction: ITransaction,
+): Promise<ReverseRefundCreditResult> {
+  const orderId = transaction.orderId;
+  const metadata = transaction.metadata as Record<string, unknown>;
+
+  const wasRefunded =
+    transaction.timeline?.refundedAt != null ||
+    typeof metadata.refundedAmount === "number";
+
+  if (!wasRefunded || metadata.refundReversedAt) {
+    return { reversed: false, reversedAmount: 0, shortfall: 0 };
+  }
+
+  const creditedAmount =
+    typeof metadata.refundedAmount === "number"
+      ? (metadata.refundedAmount as number)
+      : transaction.amount;
+
+  // Resolve the customer who received the credit
+  let customer: ICustomer | null = null;
+  const refundCustomerId = metadata.refundCustomerId as string | undefined;
+
+  if (refundCustomerId) {
+    customer = await Customer.findById(refundCustomerId);
+  }
+  if (!customer && transaction.customerId) {
+    customer = await Customer.findById(transaction.customerId);
+  }
+  if (!customer && transaction.recipient?.phoneNumber) {
+    customer = await Customer.findByOrgAndIdentifier(transaction.orgId, {
+      phoneNumber: transaction.recipient.phoneNumber,
+      email: transaction.recipient.email,
+    });
+  }
+
+  if (!customer) {
+    logger.error(
+      "Cannot reverse refund credit - customer not found; flagging for manual reconciliation",
+      { orderId },
+    );
+    metadata.refundReversalError = "Customer not found for refund reversal";
+    await transaction.save();
+    return { reversed: false, reversedAmount: 0, shortfall: creditedAmount };
+  }
+
+  // Take back what is still in the balance; any already-spent remainder
+  // is recorded as a shortfall for manual reconciliation rather than
+  // driving the balance negative.
+  const reversedAmount = Math.min(creditedAmount, customer.currentBalance);
+  const shortfall = creditedAmount - reversedAmount;
+  const previousBalance = customer.currentBalance;
+
+  customer.currentBalance -= reversedAmount;
+  customer.totalUsed += reversedAmount;
+  await customer.save();
+
+  await CustomerBalanceHistory.create({
+    customerId: customer._id,
+    orgId: transaction.orgId,
+    amount: -reversedAmount,
+    type: "adjustment",
+    previousBalance,
+    newBalance: customer.currentBalance,
+    description: `Refund reversal for retried order (Order: ${orderId})`,
+    metadata: {
+      transactionId: transaction._id?.toString(),
+      orderId,
+      refundReversal: true,
+      shortfall,
+    },
+  });
+
+  metadata.refundReversedAt = new Date().toISOString();
+  metadata.refundReversedAmount = reversedAmount;
+  if (shortfall > 0) {
+    metadata.refundReversalShortfall = shortfall;
+  }
+  // The refund stamp is consumed by the reversal; the transaction is
+  // being retried and must be refundable again if the retry fails.
+  transaction.timeline.refundedAt = undefined;
+  await transaction.save();
+
+  logger.info("Refund credit reversed for retry", {
+    orderId,
+    customerId: customer._id?.toString(),
+    reversedAmount,
+    shortfall,
+  });
+
+  return {
+    reversed: true,
+    reversedAmount,
+    shortfall,
+    customerId: customer._id?.toString(),
+  };
 }
 
 /**

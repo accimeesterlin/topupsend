@@ -140,13 +140,16 @@ export async function POST(req: NextRequest) {
     // Create payment
     const paymentResponse = await pgPayService.createPayment(paymentRequest);
 
-    // Store pending subscription upgrade in organization
+    // Store pending subscription upgrade in organization. The amount is
+    // the server-derived charge; payment confirmations are bound to it
+    // (verified token + verified amount) before activation (F-C2/F-C4).
     await Organization.findByIdAndUpdate(organization._id, {
       "subscription.pendingUpgrade": {
         tier,
         months,
         orderId,
         token: paymentResponse.token,
+        amount: finalAmount,
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
       },

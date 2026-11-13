@@ -15,8 +15,11 @@ let isJobRunning = false;
  * Runs every 5 minutes
  */
 export function initScheduledTopupsJob() {
-  // Only run in production or if explicitly enabled
-  const isEnabled = process.env.SCHEDULED_TOPUPS_ENABLED !== 'false';
+  // Opt-in only (Cluster 2 immediate step): the job runs solely when
+  // SCHEDULED_TOPUPS_ENABLED is exactly 'true'. The executor is known
+  // to be unsafe (see the 2026-11-12 analysis, S-C1..S-C3), so no
+  // environment may start it by accident or by default.
+  const isEnabled = process.env.SCHEDULED_TOPUPS_ENABLED === 'true';
 
   if (!isEnabled) {
     logger.info('Scheduled top-ups job is disabled');

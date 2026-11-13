@@ -11,6 +11,10 @@ import {
 } from "@topupsend/db";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 import { createPGPayService } from "@/lib/services/pgpay.service";
+import {
+  PricingResolutionError,
+  resolveServerSidePricing,
+} from "@/lib/services/storefront-pricing.service";
 import { logger } from "@/lib/logger";
 import { checkTransactionLimit } from "@/lib/services/usage-tracking.service";
 import { parseUserAgent } from "@/lib/parse-user-agent";
@@ -118,41 +122,56 @@ export async function POST(request: NextRequest) {
       isActive: storefrontSettings.isActive,
     });
 
-    // Validate product has required fields
+    // Validate product has required fields. The SKU is the ONLY
+    // product field trusted from the client: it is an identifier that
+    // is validated against the provider catalog server-side. Every
+    // pricing field in the body is a display hint and is ignored (F-C1).
     const productData = product as Record<string, unknown>;
     if (!productData.skuCode) {
       throw new PaymentError(400, "Invalid product data: missing SKU code");
     }
+    const skuCode = productData.skuCode as string;
 
-    // Determine final amount to charge
-    let finalAmount: number;
-    if (productData.isVariableValue) {
-      if (!amount || !sendValue) {
-        throw new PaymentError(
-          400,
-          "Amount is required for variable-value products",
-        );
-      }
-      finalAmount = parseFloat(amount.toString());
-      if (productData.minAmount && productData.maxAmount) {
-        if (
-          finalAmount < Number(productData.minAmount) ||
-          finalAmount > Number(productData.maxAmount)
-        ) {
-          throw new PaymentError(
-            400,
-            `Amount must be between ${productData.minAmount} and ${productData.maxAmount}`,
-          );
-        }
-      }
-    } else {
-      // For fixed-value products, use the pricing from product data
-      const pricing = productData.pricing as
-        | Record<string, unknown>
+    // Idempotency (F-M7): a retried checkout request carrying the same
+    // Idempotency-Key returns the existing order's checkout instead of
+    // minting a second PGPay order for the same purchase.
+    const idempotencyKey = request.headers.get("idempotency-key");
+    if (idempotencyKey && paymentMethod === "pgpay") {
+      const existing = await Transaction.findOne({
+        orgId,
+        "metadata.idempotencyKey": idempotencyKey,
+      });
+      const existingToken = existing?.metadata?.pgpayToken as
+        | string
         | undefined;
-      finalAmount = Number(pricing?.finalPrice) || 0;
-      if (finalAmount <= 0) {
-        throw new PaymentError(400, "Invalid product pricing");
+      if (existing && existingToken) {
+        const existingProvider = await PaymentProvider.findOne({
+          orgId,
+          provider: "pgpay",
+          status: "active",
+        });
+        if (existingProvider) {
+          const existingPgpay = createPGPayService({
+            userId: existingProvider.credentials.userId as string,
+            merchantId: existingProvider.credentials.merchantId as string,
+            apiKey: existingProvider.credentials.apiKey as string,
+            environment: existingProvider.environment,
+          });
+          logger.info("Idempotent checkout retry - returning existing order", {
+            orderId: existing.orderId,
+            orgId,
+          });
+          return createSuccessResponse({
+            success: true,
+            requiresRedirect: true,
+            data: {
+              orderId: existing.orderId,
+              checkoutUrl: existingPgpay.getCheckoutUrl(existingToken),
+              pgpayToken: existingToken,
+              message: "Redirecting to payment gateway...",
+            },
+          });
+        }
       }
     }
 
@@ -180,9 +199,49 @@ export async function POST(request: NextRequest) {
       apiKey: integration.credentials.apiKey,
     });
 
+    // Country: prefer the region parsed from the phone number itself;
+    // the client-supplied country is only a fallback hint.
+    const parsedPhone = parsePhoneNumber(phoneNumber!);
+    const detectedCountry = parsedPhone.regionCode || country?.code || "";
+    const countryName = detectedCountry
+      ? getCountryName(detectedCountry)
+      : country?.name || "Unknown";
+
+    // ===================================================================
+    // Server-side pricing (F-C1): the charged amount, the provider cost
+    // and the fulfilled send-value are re-derived here from the
+    // provider catalog and the organization's pricing rules. Nothing
+    // the client sent about price influences them.
+    // ===================================================================
+    let resolved;
+    try {
+      resolved = await resolveServerSidePricing({
+        orgId,
+        skuCode,
+        countryIso: detectedCountry,
+        requestedSendValue: sendValue ?? amount,
+        dingConnect,
+      });
+    } catch (error) {
+      if (error instanceof PricingResolutionError) {
+        throw new PaymentError(error.statusCode, error.message);
+      }
+      throw error;
+    }
+
+    const finalAmount = resolved.finalPrice;
+    const actualSendValue = resolved.sendValue;
+    const costPrice = resolved.costPrice;
+    const markup = resolved.markup;
+    const discount = resolved.discountAmount;
+    const operatorName = resolved.providerName;
+    const operatorId = resolved.product.ProviderCode;
+
     // ===================================================================
     // CRITICAL: Check DingConnect balance BEFORE allowing payment
-    // This prevents users from paying when we can't fulfill the top-up
+    // This prevents users from paying when we can't fulfill the top-up.
+    // The solvency check is priced off the SERVER-DERIVED cost, never
+    // off client-supplied amounts.
     // ===================================================================
     try {
       const balance = await dingConnect.getBalance();
@@ -193,12 +252,7 @@ export async function POST(request: NextRequest) {
         requestedAmount: finalAmount,
       });
 
-      // Check if balance is sufficient
-      // For variable-value products, use the full amount as estimate (safer)
-      // For fixed-value products, estimate 90% of sell price
-      const estimatedCost = productData.isVariableValue
-        ? finalAmount // Use full amount for variable-value (includes fees)
-        : finalAmount * 0.9; // 90% for fixed-value
+      const estimatedCost = costPrice;
 
       if (balance.AccountBalance < estimatedCost) {
         logger.error(
@@ -209,7 +263,7 @@ export async function POST(request: NextRequest) {
             estimatedCost,
             requiredAmount: finalAmount,
             currency: balance.CurrencyCode,
-            isVariableValue: productData.isVariableValue,
+            isVariableValue: resolved.isVariableValue,
             deficit: estimatedCost - balance.AccountBalance,
             alert:
               "PROVIDER ACCOUNT NEEDS IMMEDIATE FUNDING - USER BLOCKED FROM PAYING",
@@ -253,47 +307,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Always resolve sendValue — DingConnect requires it for ALL products
-    const actualSendValue = productData.isVariableValue
-      ? sendValue || finalAmount
-      : Number((productData.pricing as Record<string, unknown> | undefined)?.costPrice) || finalAmount;
-
-    // Use country from lookup if provided, otherwise detect from phone number
-    const parsedPhone = parsePhoneNumber(phoneNumber!);
-    const detectedCountry = country?.code || parsedPhone.regionCode || "";
-    const countryName = country?.name || (detectedCountry ? getCountryName(detectedCountry) : "Unknown");
-
-    // Extract pricing breakdown from product data
-    const pricing = productData.pricing as Record<string, unknown> | undefined;
-    const costPrice = Number(pricing?.costPrice) || 0;
-    const markup = Number(pricing?.markup) || 0;
-    const discount = Number(pricing?.discount) || 0;
-
-    // Resolve operator name from DingConnect GetProviders API (server-side)
-    const operatorId = (productData.providerCode || productData.provider || "unknown") as string;
-    const providers = await dingConnect
-      .getProviders({ countryIso: detectedCountry })
-      .catch((error) => {
-        logger.warn("Failed to fetch providers for name resolution", {
-          error: error instanceof Error ? error.message : "Unknown error",
-          countryIso: detectedCountry,
-        });
-        return [];
-      });
-    const matchedProvider = providers.find(
-      (p) => p.ProviderCode === operatorId,
-    );
-    const operatorName = matchedProvider?.ProviderName
-      || (productData.providerName as string)
-      || (productData.name as string)
-      || operatorId;
-
     logger.info("Transaction metadata preparation", {
-      isVariableValue: productData.isVariableValue,
+      isVariableValue: resolved.isVariableValue,
       sendValue,
       finalAmount,
       actualSendValue,
-      skuCode: productData.skuCode,
+      skuCode,
       detectedCountry,
       countryName,
       operatorName,
@@ -304,7 +323,7 @@ export async function POST(request: NextRequest) {
       orgId,
       productId:
         (productData._id as string | undefined)?.toString() ||
-        `ding-${productData.skuCode}`,
+        `ding-${skuCode}`,
       amount: finalAmount,
       currency: "USD",
       status: "pending",
@@ -334,19 +353,24 @@ export async function POST(request: NextRequest) {
         secChUaPlatform: request.headers.get("sec-ch-ua-platform") || undefined,
         secChUaMobile: request.headers.get("sec-ch-ua-mobile") || undefined,
         ...(browserMetadata ? { browser: browserMetadata } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
         retryCount: 0,
-        // Store product details for webhook processing
-        productSkuCode: productData.skuCode as string,
+        // Store product details for webhook processing — all resolved
+        // server-side above, never from client pricing fields.
+        productSkuCode: skuCode,
         productName: (productData.name as string) || operatorName,
         providerName: operatorName,
-        isVariableValue: !!productData.isVariableValue,
+        isVariableValue: resolved.isVariableValue,
         sendValue: actualSendValue,
-        benefitAmount: productData.benefitAmount as number,
-        benefitUnit: productData.benefitUnit as string,
+        benefitAmount:
+          resolved.benefitAmount ||
+          (productData.benefitAmount as number | undefined),
+        benefitUnit:
+          resolved.benefitUnit || (productData.benefitUnit as string | undefined),
         // Country info
         countryCode: detectedCountry,
         countryName,
-        // Pricing breakdown
+        // Pricing breakdown (server-derived)
         costPrice,
         markup,
         discount,
@@ -431,13 +455,17 @@ export async function POST(request: NextRequest) {
           description: `Top-up for ${phoneNumber} - ${productData.name}`,
           metadata: {
             transactionId: transaction._id?.toString(),
-            productSkuCode: productData.skuCode as string,
+            productSkuCode: skuCode,
             phoneNumber,
-            // Pass critical fields for webhook processing
-            isVariableValue: !!productData.isVariableValue,
+            // Pass critical fields for webhook processing (server-derived)
+            isVariableValue: resolved.isVariableValue,
             sendValue: actualSendValue,
-            benefitAmount: productData.benefitAmount,
-            benefitUnit: productData.benefitUnit,
+            benefitAmount:
+              resolved.benefitAmount ||
+              (productData.benefitAmount as number | undefined),
+            benefitUnit:
+              resolved.benefitUnit ||
+              (productData.benefitUnit as string | undefined),
             // Country and pricing for enrichment
             countryCode: detectedCountry,
             countryName,
@@ -454,9 +482,12 @@ export async function POST(request: NextRequest) {
           redirectUrl: pgpayResponse.redirectUrl,
         });
 
-        // Store PGPay token in transaction metadata
+        // Store PGPay token in transaction metadata, and the gateway
+        // order id in the indexed paymentId field (F-H12) so webhook
+        // deliveries can be matched and deduplicated on it.
         transaction.metadata.pgpayToken = pgpayResponse.token;
         transaction.metadata.pgpayOrderId = pgpayResponse.orderId;
+        transaction.paymentId = pgpayResponse.orderId;
         transaction.status = "pending" as typeof transaction.status;
         await transaction.save();
 
