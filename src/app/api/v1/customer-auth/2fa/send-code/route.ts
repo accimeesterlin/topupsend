@@ -15,6 +15,7 @@ import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { EmailService } from "@/lib/services/email.service";
+import { escapeHtml } from "@/lib/escape-html";
 import {
   getCustomerJwtSecret,
   getCustomerSession,
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
 
   <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
     <p style="font-size: 16px; margin-bottom: 20px;">
-      Hello${customer.name ? ` ${customer.name}` : ""},
+      Hello${customer.name ? ` ${escapeHtml(customer.name)}` : ""},
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
@@ -154,13 +155,13 @@ export async function POST(request: NextRequest) {
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
       Best regards,<br>
-      The ${org.name} Team
+      The ${escapeHtml(org.name)} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${org.name}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${escapeHtml(org.name)}. All rights reserved.</p>
   </div>
 </body>
 </html>

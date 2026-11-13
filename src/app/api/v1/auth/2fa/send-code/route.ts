@@ -5,6 +5,7 @@ import { dbConnection } from "@topupsend/db/connection";
 import { EmailService } from "@/lib/services/email.service";
 import { Organization } from "@topupsend/db";
 import { getJwtSecret, getSession } from "@/lib/auth";
+import { escapeHtml } from "@/lib/escape-html";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
 import {
   STAFF_PENDING_AUTH_COOKIE,
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
     // Get organization for email branding
     const org = await Organization.findById(user.orgId);
     const orgName = org?.name || "Prepaid Minutes Platform";
+    const orgNameHtml = escapeHtml(orgName);
 
     // Send email with 2FA code
     const subject = `Your Two-Factor Authentication Code`;
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      You requested a two-factor authentication code to access your ${orgName} account.
+      You requested a two-factor authentication code to access your ${orgNameHtml} account.
     </p>
 
     <div style="background: #f9fafb; border-left: 4px solid #667eea; padding: 20px; margin: 24px 0; border-radius: 4px; text-align: center;">
@@ -145,13 +147,13 @@ export async function POST(req: NextRequest) {
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
       Best regards,<br>
-      The ${orgName} Team
+      The ${orgNameHtml} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgName}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgNameHtml}. All rights reserved.</p>
   </div>
 </body>
 </html>
