@@ -1,6 +1,11 @@
 /**
  * Send Two-Factor Authentication Code
  * POST /api/v1/customer-auth/2fa/send-code
+ *
+ * F-H1: a code is issued only inside a post-password pending-auth
+ * state (created by the customer login route) or for an already
+ * signed-in customer requesting a code for their own account. The
+ * code is generated with a CSPRNG and stored as a SHA-256 hash.
  */
 
 import { NextRequest } from "next/server";
@@ -10,19 +15,24 @@ import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { EmailService } from "@/lib/services/email.service";
-import crypto from "crypto";
+import {
+  getCustomerJwtSecret,
+  getCustomerSession,
+} from "@/lib/customer-auth";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
+import {
+  CUSTOMER_PENDING_AUTH_COOKIE,
+  TWO_FACTOR_CODE_TTL_MS,
+  generateTwoFactorCode,
+  hashTwoFactorCode,
+  pendingAuthStateMatches,
+  verifyPendingAuthCookie,
+} from "@/lib/two-factor";
 
 const sendCodeSchema = z.object({
   email: z.string().email("Invalid email address"),
   orgSlug: z.string().min(1, "Organization slug is required"),
 });
-
-/**
- * Generate a 6-digit verification code
- */
-function generateVerificationCode(): string {
-  return crypto.randomInt(100000, 999999).toString();
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +40,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const data = sendCodeSchema.parse(body);
+
+    // Rate limit code requests per account + IP (F-M6)
+    const rateLimit = await checkAuthRateLimit(
+      "twoFactorSend",
+      `${data.orgSlug.toLowerCase()}:${data.email.toLowerCase()}`,
+      getClientIp(request),
+    );
+    if (!rateLimit.allowed) {
+      throw ApiErrors.TooManyRequests(
+        "Too many verification code requests. Please try again later.",
+      );
+    }
 
     // Find organization by slug
     const org = await Org.findOne({ slug: data.orgSlug.toLowerCase() });
@@ -42,7 +64,7 @@ export async function POST(request: NextRequest) {
     const customer = await Customer.findOne({
       email: data.email.toLowerCase(),
       orgId: org._id.toString(),
-    });
+    }).select("+twoFactorPendingId +twoFactorPendingExpires");
 
     if (!customer) {
       throw ApiErrors.NotFound("Customer not found");
@@ -53,12 +75,38 @@ export async function POST(request: NextRequest) {
       throw ApiErrors.BadRequest("Two-factor authentication is not enabled");
     }
 
-    // Generate verification code
-    const code = generateVerificationCode();
+    // Bind the request to the password step: either the pending-auth
+    // cookie the login route issued for THIS customer (with matching
+    // server-side state), or an existing full session for this
+    // customer.
+    const pending = verifyPendingAuthCookie(
+      request.cookies.get(CUSTOMER_PENDING_AUTH_COOKIE)?.value,
+      getCustomerJwtSecret(),
+    );
+    const boundByPending =
+      pending !== null &&
+      pending.sub === String(customer._id) &&
+      pendingAuthStateMatches(customer, pending);
+    let boundBySession = false;
+    if (!boundByPending) {
+      const session = await getCustomerSession();
+      boundBySession = session?.customerId === String(customer._id);
+    }
+    if (!boundByPending && !boundBySession) {
+      throw ApiErrors.Unauthorized(
+        "Please sign in with your password before requesting a verification code",
+      );
+    }
 
-    // Set code and expiry (10 minutes)
-    customer.twoFactorCode = code;
-    customer.twoFactorCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    // Generate a verification code with a CSPRNG; store only its hash.
+    const code = generateTwoFactorCode();
+
+    // Set code hash and expiry (10 minutes)
+    customer.twoFactorCode = hashTwoFactorCode(String(customer._id), code);
+    customer.twoFactorCodeExpiry = new Date(
+      Date.now() + TWO_FACTOR_CODE_TTL_MS,
+    ); // 10 minutes
+    customer.twoFactorAttempts = 0;
     customer.twoFactorVerified = false;
 
     await customer.save();

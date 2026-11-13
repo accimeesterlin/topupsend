@@ -3,15 +3,37 @@ import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { UserRole } from '@topupsend/types';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-);
+/**
+ * The staff session secret (F-C9: fail closed).
+ *
+ * There is deliberately NO fallback literal: if JWT_SECRET is unset,
+ * signing throws and verification rejects every token, instead of
+ * silently trusting a secret printed in the source code. Resolved
+ * lazily on each call so importing this module (build, tests) never
+ * depends on the deployment's env.
+ */
+export function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET environment variable is not set; refusing to sign or verify session tokens'
+    );
+  }
+  return new TextEncoder().encode(secret);
+}
 
 export interface SessionPayload {
   userId: string;
   email: string;
   roles: UserRole[];
   orgId: string;
+  /**
+   * Token version at mint time (F-M1). requireAuth compares it with
+   * the user record's current tokenVersion; a mismatch means the
+   * session has been revoked (password reset, role change,
+   * deactivation, logout). Absent on pre-hardening tokens (= 0).
+   */
+  tv?: number;
 }
 
 /**
@@ -36,7 +58,7 @@ export async function createToken(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(process.env.JWT_EXPIRES_IN || '7d')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 
   return token;
 }
@@ -46,9 +68,11 @@ export async function createToken(payload: SessionPayload): Promise<string> {
  */
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as unknown as SessionPayload;
   } catch (_error) {
+    // Also the fail-closed path: an unset JWT_SECRET lands here and
+    // every token is rejected rather than checked against a fallback.
     return null;
   }
 }

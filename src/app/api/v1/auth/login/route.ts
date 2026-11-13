@@ -3,11 +3,24 @@ import { z } from "zod";
 import { dbConnection } from "@topupsend/db/connection";
 import { User } from "@topupsend/db/models/user.model";
 import { UserOrganization } from "@topupsend/db";
-import { verifyPassword, createToken, createSessionCookie } from "@/lib/auth";
+import {
+  verifyPassword,
+  createToken,
+  createSessionCookie,
+  getJwtSecret,
+} from "@/lib/auth";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { logger } from "@/lib/logger";
 import { setSentryUser } from "@/lib/sentry-utils";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
+import {
+  STAFF_PENDING_AUTH_COOKIE,
+  TWO_FACTOR_PENDING_TTL_MS,
+  createPendingAuthCookie,
+  newPendingAuthId,
+  signPendingAuthCookie,
+} from "@/lib/two-factor";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -33,6 +46,18 @@ export async function POST(request: NextRequest) {
 
     const { email, password } = validation.data;
 
+    // Rate limit credential attempts per account + IP (F-M6)
+    const rateLimit = await checkAuthRateLimit(
+      "login",
+      email,
+      getClientIp(request),
+    );
+    if (!rateLimit.allowed) {
+      throw ApiErrors.TooManyRequests(
+        "Too many login attempts. Please try again later.",
+      );
+    }
+
     // Find user
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
@@ -57,11 +82,42 @@ export async function POST(request: NextRequest) {
         email: user.email,
       });
 
-      return createSuccessResponse({
+      // The password step passed: create the server-side pending-auth
+      // state the 2FA send/verify endpoints will require (F-H1). The
+      // browser carries only an HMAC-signed cookie naming this state;
+      // without it, no code can be requested or verified into a
+      // session.
+      const pendingId = newPendingAuthId();
+      const pendingExpires = new Date(
+        Date.now() + TWO_FACTOR_PENDING_TTL_MS,
+      );
+      user.twoFactorPendingId = pendingId;
+      user.twoFactorPendingExpires = pendingExpires;
+      user.twoFactorAttempts = 0;
+      await user.save();
+
+      const response = createSuccessResponse({
         requires2FA: true,
         email: user.email,
         message: "Two-factor authentication required. Please check your email for the verification code.",
       });
+
+      response.headers.append(
+        "Set-Cookie",
+        createPendingAuthCookie(
+          STAFF_PENDING_AUTH_COOKIE,
+          signPendingAuthCookie(
+            {
+              sub: user._id.toString(),
+              jti: pendingId,
+              exp: pendingExpires.getTime(),
+            },
+            getJwtSecret(),
+          ),
+        ),
+      );
+
+      return response;
     }
 
     logger.info("User logged in", {
@@ -106,6 +162,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       roles: user.roles,
       orgId: sessionOrgId || "",
+      tv: user.tokenVersion ?? 0,
     };
     const token = await createToken(sessionPayload);
 

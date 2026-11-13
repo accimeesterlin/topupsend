@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
         email: result.customer.email!,
         emailVerified: true,
         name: result.customer.name,
+        tv: result.customer.tokenVersion ?? 0,
       });
     }
 
