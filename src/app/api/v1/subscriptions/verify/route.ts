@@ -37,6 +37,17 @@ export async function POST(req: NextRequest) {
       pgPayToken?: string;
     };
 
+    // F-H5: type gates before any query — an object value such as
+    // {"$ne": null} would otherwise flow into the pending-upgrade
+    // $or lookup and match an arbitrary organization.
+    if (orderId !== undefined && typeof orderId !== "string") {
+      return createErrorResponse("Invalid orderId", 400);
+    }
+
+    if (pgPayToken !== undefined && typeof pgPayToken !== "string") {
+      return createErrorResponse("Invalid pgPayToken", 400);
+    }
+
     console.log("Verifying subscription payment:", {
       orderId,
       token: pgPayToken?.substring(0, 10) + "...",

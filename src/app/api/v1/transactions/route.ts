@@ -76,6 +76,15 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    // F-H10: this handler used to have no session check at all —
+    // anyone could rewrite the recipient name on any tenant's
+    // transaction by orderId. Authenticate exactly like the GET
+    // handler above and scope the lookup to the caller's org.
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await dbConnection.connect();
 
     const { searchParams } = new URL(request.url);
@@ -94,8 +103,11 @@ export async function PATCH(request: NextRequest) {
 
     logger.info('Updating transaction with customer name', { orderId, customerName });
 
-    // Find transaction
-    const transaction = await Transaction.findOne({ orderId });
+    // Find transaction within the caller's organization only
+    const transaction = await Transaction.findOne({
+      orderId,
+      orgId: session.orgId,
+    });
 
     if (!transaction) {
       logger.error('Transaction not found', { orderId });
