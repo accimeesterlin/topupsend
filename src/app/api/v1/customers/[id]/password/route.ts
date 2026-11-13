@@ -17,8 +17,14 @@ export async function PUT(
     const { id } = await params;
     const customerSession = await requireCustomerAuth(request);
 
-    // Fetch customer from database
-    const customer = await Customer.findById(customerSession.customerId);
+    // Fetch customer from database. passwordHash is select:false on the
+    // schema, so it must be loaded explicitly — a plain findById returns
+    // a document without the hash and comparePassword then always fails,
+    // even for the correct current password (same pattern as the
+    // profile PUT in customers/[id]).
+    const customer = await Customer.findById(customerSession.customerId).select(
+      "+passwordHash",
+    );
     if (!customer) {
       return createErrorResponse("Customer not found", 404);
     }

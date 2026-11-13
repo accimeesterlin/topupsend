@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
     const favoritesOnly = searchParams.get('favorites') === 'true';
     const groupId = searchParams.get('groupId');
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    // Clamp page size to the platform max (F-M13)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 100);
 
     const query: any = { orgId: session.orgId };
 
