@@ -59,14 +59,25 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Translation function
+  // Translation function. When the active locale has no string for the
+  // key, fall back to the English string instead of leaking the raw key
+  // to users (F-M10); the raw key is only returned when English is
+  // missing the key too.
   const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split(".");
-    let value: any = translations[language];
 
-    for (const k of keys) {
-      value = value?.[k];
-      if (value === undefined) break;
+    const lookup = (dict: unknown): unknown => {
+      let value: any = dict;
+      for (const k of keys) {
+        value = value?.[k];
+        if (value === undefined) break;
+      }
+      return value;
+    };
+
+    let value = lookup(translations[language]);
+    if (typeof value !== "string" && language !== "en") {
+      value = lookup(translations.en);
     }
 
     if (typeof value !== "string") {
