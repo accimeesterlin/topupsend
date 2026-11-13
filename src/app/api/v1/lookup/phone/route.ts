@@ -46,7 +46,9 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Phone number is required", 400);
     }
 
-    if (!orgSlug) {
+    // F-M15: reject non-string orgSlug before it reaches the
+    // findOne({ slug }) lookups as a Mongo operator.
+    if (!orgSlug || typeof orgSlug !== "string") {
       return createErrorResponse("Organization slug is required", 400);
     }
 

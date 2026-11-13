@@ -45,6 +45,18 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Missing pgPayToken", 400);
     }
 
+    // F-H5: type gates before any query — object values would flow
+    // into the transaction lookups as Mongo operators.
+    if (typeof pgPayToken !== "string") {
+      logger.error("PGPay webhook token is not a string", { webhookData });
+      return createErrorResponse("Invalid pgPayToken", 400);
+    }
+
+    if (orderId !== undefined && typeof orderId !== "string") {
+      logger.error("PGPay webhook orderId is not a string", { webhookData });
+      return createErrorResponse("Invalid orderId", 400);
+    }
+
     // Find transaction by PGPay token or by orderId as fallback
     let transaction = await Transaction.findOne({
       "metadata.pgpayToken": pgPayToken,

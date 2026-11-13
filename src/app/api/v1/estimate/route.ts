@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
 
     logger.info('Price estimate request', { orgSlug, skuCode, sendValue });
 
-    if (!orgSlug) {
+    // F-M15: reject non-string orgSlug before it reaches the
+    // findOne({ slug }) lookups as a Mongo operator.
+    if (!orgSlug || typeof orgSlug !== 'string') {
       return createErrorResponse('Organization slug is required', 400);
     }
 

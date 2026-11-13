@@ -116,6 +116,7 @@ export async function PUT(
       lastName,
       phone,
       password,
+      currentPassword,
       twoFactorEnabled,
     } = body;
 
@@ -136,6 +137,36 @@ export async function PUT(
       if (customer.orgId?.toString() !== staffSession.orgId) {
         console.log('[Customer Update] Forbidden: Customer belongs to different org');
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    // F-M3: a customer changing their OWN password through this
+    // profile route must prove knowledge of the current password —
+    // the same requirement the dedicated /password route enforces.
+    // Without it, a hijacked customer session could set a new
+    // password with no verification and take the account over
+    // permanently. (Staff callers keep the org-scoped admin
+    // set-password behavior the dashboard uses.)
+    if (password && isCustomer) {
+      if (typeof currentPassword !== "string" || !currentPassword) {
+        return NextResponse.json(
+          { error: "Current password is required to set a new password" },
+          { status: 400 },
+        );
+      }
+
+      const customerWithHash = await Customer.findById(id).select(
+        "+passwordHash",
+      );
+      const currentPasswordOk = customerWithHash
+        ? await customerWithHash.comparePassword(currentPassword)
+        : false;
+
+      if (!currentPasswordOk) {
+        return NextResponse.json(
+          { error: "Current password is incorrect" },
+          { status: 401 },
+        );
       }
     }
 

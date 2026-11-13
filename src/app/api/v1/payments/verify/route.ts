@@ -21,8 +21,19 @@ export async function POST(request: NextRequest) {
       pgPayToken?: string;
     };
 
-    if (!orderId) {
+    // F-H5: type gates before any query — an object value such as
+    // {"$ne": null} would otherwise flow into the Mongo lookup as an
+    // operator and match an arbitrary transaction.
+    if (!orderId || typeof orderId !== "string") {
       return createErrorResponse("Missing orderId", 400);
+    }
+
+    if (
+      pgPayToken !== undefined &&
+      pgPayToken !== null &&
+      typeof pgPayToken !== "string"
+    ) {
+      return createErrorResponse("Invalid pgPayToken", 400);
     }
 
     logger.info("Payment verification requested", { orderId });

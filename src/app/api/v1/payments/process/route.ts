@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
       throw new PaymentError(400, "Missing required fields");
     }
 
+    // F-M15: reject non-string orgSlug before it reaches the
+    // findOne({ slug }) lookups as a Mongo operator.
+    if (typeof orgSlug !== "string") {
+      throw new PaymentError(400, "Invalid organization slug");
+    }
+
     // Find organization by slug (check both legacy Org and new Organization models)
     logger.info("Looking up organization by slug", { orgSlug });
     const legacyOrg = await Org.findOne({ slug: orgSlug, isActive: true });

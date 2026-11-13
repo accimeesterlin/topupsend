@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
       return createErrorResponse('Discount code is required', 400);
     }
 
-    if (!orgSlug) {
+    // F-M15: an object orgSlug (e.g. {"$ne": null}) would otherwise
+    // flow into findOne({ slug }) as a Mongo operator and match an
+    // arbitrary organization.
+    if (!orgSlug || typeof orgSlug !== 'string') {
       return createErrorResponse('Organization slug is required', 400);
     }
 

@@ -34,14 +34,24 @@ export async function POST(req: NextRequest) {
       [key: string]: unknown;
     };
 
-    console.log("PGPay subscription webhook received:", {
-      orderId,
-      token: pgPayToken?.substring(0, 10) + "...",
-    });
-
     if (!pgPayToken) {
       return createErrorResponse("Missing pgPayToken", 400);
     }
+
+    // F-H5: type gates before any query — object values would flow
+    // into the pending-upgrade lookups as Mongo operators.
+    if (typeof pgPayToken !== "string") {
+      return createErrorResponse("Invalid pgPayToken", 400);
+    }
+
+    if (orderId !== undefined && typeof orderId !== "string") {
+      return createErrorResponse("Invalid orderId", 400);
+    }
+
+    console.log("PGPay subscription webhook received:", {
+      orderId,
+      token: pgPayToken.substring(0, 10) + "...",
+    });
 
     // Verify payment with PGPay
     const pgPayUserId = process.env.PGPAY_USER_ID;
