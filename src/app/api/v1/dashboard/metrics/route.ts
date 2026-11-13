@@ -48,57 +48,89 @@ export async function GET(request: NextRequest) {
     const periodLength = now.getTime() - startDate.getTime();
     const prevStartDate = new Date(startDate.getTime() - periodLength);
 
-    // Fetch transactions for current period
-    const transactions = await Transaction.find({
-      orgId: session.orgId,
-      createdAt: { $gte: startDate },
-    });
+    // Aggregate in the database (F-H13): this endpoint used to load the
+    // org's entire transaction history into memory twice per dashboard
+    // load and total it in JS. The pipelines below follow the sibling
+    // dashboard/analytics pattern and compute the same figures.
+    const summaryPipeline = (match: Record<string, unknown>) => [
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "completed"] }, "$amount", 0],
+            },
+          },
+          completed: {
+            $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+          },
+        },
+      },
+    ];
 
-    // Fetch transactions for previous period
-    const prevTransactions = await Transaction.find({
-      orgId: session.orgId,
-      createdAt: { $gte: prevStartDate, $lt: startDate },
-    });
+    const [currentAgg, prevAgg, customers, newCustomers, prevNewCustomers] =
+      await Promise.all([
+        Transaction.aggregate(
+          summaryPipeline({
+            orgId: session.orgId,
+            createdAt: { $gte: startDate },
+          }),
+        ),
+        Transaction.aggregate(
+          summaryPipeline({
+            orgId: session.orgId,
+            createdAt: { $gte: prevStartDate, $lt: startDate },
+          }),
+        ),
+        Customer.countDocuments({ orgId: session.orgId }),
+        Customer.countDocuments({
+          orgId: session.orgId,
+          createdAt: { $gte: startDate },
+        }),
+        Customer.countDocuments({
+          orgId: session.orgId,
+          createdAt: { $gte: prevStartDate, $lt: startDate },
+        }),
+      ]);
+
+    const current = currentAgg[0] || {
+      totalTransactions: 0,
+      totalRevenue: 0,
+      completed: 0,
+    };
+    const prev = prevAgg[0] || {
+      totalTransactions: 0,
+      totalRevenue: 0,
+      completed: 0,
+    };
 
     // Calculate revenue
-    const revenue = transactions
-      .filter(t => t.status === 'completed')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    const prevRevenue = prevTransactions
-      .filter(t => t.status === 'completed')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const revenue = current.totalRevenue;
+    const prevRevenue = prev.totalRevenue;
 
     const revenueTrend = prevRevenue > 0
       ? ((revenue - prevRevenue) / prevRevenue) * 100
       : revenue > 0 ? 100 : 0;
 
     // Calculate transaction counts
-    const transactionCount = transactions.length;
-    const prevTransactionCount = prevTransactions.length;
+    const transactionCount = current.totalTransactions;
+    const prevTransactionCount = prev.totalTransactions;
     const transactionTrend = prevTransactionCount > 0
       ? ((transactionCount - prevTransactionCount) / prevTransactionCount) * 100
       : transactionCount > 0 ? 100 : 0;
 
-    // Calculate customer counts
-    const customers = await Customer.countDocuments({ orgId: session.orgId });
-    const newCustomers = await Customer.countDocuments({
-      orgId: session.orgId,
-      createdAt: { $gte: startDate },
-    });
-    const prevNewCustomers = await Customer.countDocuments({
-      orgId: session.orgId,
-      createdAt: { $gte: prevStartDate, $lt: startDate },
-    });
+    // Calculate customer trend
     const customerTrend = prevNewCustomers > 0
       ? ((newCustomers - prevNewCustomers) / prevNewCustomers) * 100
       : newCustomers > 0 ? 100 : 0;
 
     // Calculate success rate
-    const completedCount = transactions.filter(t => t.status === 'completed').length;
+    const completedCount = current.completed;
     const successRate = transactionCount > 0 ? (completedCount / transactionCount) * 100 : 0;
 
-    const prevCompletedCount = prevTransactions.filter(t => t.status === 'completed').length;
+    const prevCompletedCount = prev.completed;
     const prevSuccessRate = prevTransactionCount > 0 ? (prevCompletedCount / prevTransactionCount) * 100 : 0;
     const successRateTrend = prevSuccessRate > 0
       ? successRate - prevSuccessRate

@@ -237,7 +237,18 @@ const ProductSchema = new Schema<IProduct>(
 // Indexes
 ProductSchema.index({ orgId: 1, status: 1 });
 ProductSchema.index({ operatorCountry: 1 });
-ProductSchema.index({ provider: 1, providerProductId: 1 });
+// Idempotency (F-M12): a provider product may exist at most once per
+// org, so catalog sync cannot mint duplicate entries. Partial index
+// over non-empty providerProductId only — dashboard-created placeholder
+// products carry providerProductId "" until configured and must not
+// collide with each other.
+ProductSchema.index(
+  { orgId: 1, provider: 1, providerProductId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { providerProductId: { $gt: "" } },
+  },
+);
 ProductSchema.index({ 'metadata.category': 1 });
 
 // Validate sell price >= cost price

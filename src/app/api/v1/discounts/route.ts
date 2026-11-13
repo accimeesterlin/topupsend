@@ -20,6 +20,13 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'all'; // all, active, inactive, expired
     const type = searchParams.get('type') || 'all'; // all, percentage, fixed
     const codeType = searchParams.get('codeType') || 'all'; // all, coded, automatic
+    // Pagination (F-M13): this list used to return the org's entire
+    // discount collection unbounded.
+    const page = Math.max(parseInt(searchParams.get('page') || '1') || 1, 1);
+    const limit = Math.min(
+      parseInt(searchParams.get('limit') || '100') || 100,
+      100
+    );
 
     // Build query
     const query: any = { orgId: session.orgId };
@@ -64,7 +71,11 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const discounts = await Discount.find(query).sort({ createdAt: -1 });
+    const total = await Discount.countDocuments(query);
+    const discounts = await Discount.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     logger.info('Fetched discounts', {
       orgId: session.orgId,
@@ -72,7 +83,15 @@ export async function GET(request: NextRequest) {
       filters: { search, status, type, codeType },
     });
 
-    return createSuccessResponse({ discounts });
+    return createSuccessResponse({
+      discounts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     logger.error('Error fetching discounts', { error });
     return handleApiError(error);

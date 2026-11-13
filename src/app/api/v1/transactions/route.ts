@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const excludeTestMode = searchParams.get('excludeTestMode') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    // Clamp page size to the platform max (F-M13)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
 
     const query: any = { orgId: session.orgId };
 
