@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
 import bcrypt from "bcryptjs";
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -60,7 +60,7 @@ export async function PUT(
 
     // Try STAFF auth first (dashboard users)
     try {
-      staffSession = await getSession();
+      staffSession = await getRevalidatedSession();
       if (staffSession) {
         console.log('[Customer Update] Staff auth successful:', {
           staffUserId: staffSession.userId,
@@ -272,7 +272,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

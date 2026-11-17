@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import {
   Customer,
@@ -27,7 +27,7 @@ const mergeCustomersSchema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

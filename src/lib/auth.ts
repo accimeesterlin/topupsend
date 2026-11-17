@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { UserRole } from '@topupsend/types';
+import { User, dbConnection } from '@topupsend/db';
 
 /**
  * The staff session secret (F-C9: fail closed).
@@ -97,7 +98,18 @@ export function clearSessionCookie(): string {
 }
 
 /**
- * Get the current session from cookies
+ * Get the current session from cookies.
+ *
+ * WARNING — claims only: this verifies the JWT signature and expiry
+ * and NOTHING else. It does not check that the user still exists, is
+ * still active, or that the token's version is still current, so a
+ * deactivated or password-reset user keeps passing it until the
+ * token expires. Do NOT authorize API routes with it. Use
+ * `requireAuth` (throws, RFC-7807 errors) or
+ * `getRevalidatedSession` (null-on-refusal, same convention as this
+ * function) instead. The remaining callers are the auth-flow routes
+ * that need the raw claims themselves (logout's revocation bump,
+ * the 2FA send-code session binding).
  */
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
@@ -108,4 +120,41 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 
   return verifyToken(sessionCookie.value);
+}
+
+/**
+ * Get the current session, revalidated against the user record —
+ * the same F-M1 revalidation `requireAuth` performs, in the
+ * null-on-refusal shape of `getSession` so routes keep their own
+ * error responses.
+ *
+ * Returns null when there is no usable session: no cookie, an
+ * invalid or expired token, a user record that no longer exists or
+ * has been deactivated, or a token minted at a stale tokenVersion
+ * (password reset/change, role change, org-member removal, logout).
+ * Before this helper existed, 21 route files authorized with bare
+ * `getSession()` and skipped this revalidation entirely (sweep
+ * finding N3 — the F-M1 fix was partial).
+ */
+export async function getRevalidatedSession(): Promise<SessionPayload | null> {
+  const session = await getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  await dbConnection.connect();
+  const user = await User.findById(session.userId).select(
+    'isActive tokenVersion',
+  );
+
+  if (!user || !user.isActive) {
+    return null;
+  }
+
+  if ((session.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    return null;
+  }
+
+  return session;
 }

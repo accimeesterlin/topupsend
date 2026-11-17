@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
 import sgMail from '@sendgrid/mail';
@@ -12,7 +12,7 @@ import { SendMailClient } from 'zeptomail';
 // POST - Test integration connection
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

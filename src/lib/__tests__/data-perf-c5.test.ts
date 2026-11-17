@@ -66,6 +66,9 @@ jest.mock("@/lib/api-response", () => ({
 
 jest.mock("@/lib/auth", () => ({
   getSession: (...args: any[]) => mockGetSession(...args),
+  // Migrated routes call the revalidating helper; in this suite the
+  // fabricated session stands in for an already-revalidated one.
+  getRevalidatedSession: (...args: any[]) => mockGetSession(...args),
 }));
 
 jest.mock("@/lib/auth-middleware", () => ({
