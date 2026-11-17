@@ -4,6 +4,8 @@ import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
 import { guessNameFromEmail } from "@/lib/guess-name-from-email";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 export interface NameGuess {
   customerId: string;
@@ -26,6 +28,12 @@ export async function POST() {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Feeds the customer-cleanup (edit) workflow and enumerates
+    // customer emails — same EDIT_CUSTOMERS gate as the merge flow.
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await dbConnection.connect();

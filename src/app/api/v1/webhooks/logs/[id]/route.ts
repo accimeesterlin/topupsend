@@ -11,6 +11,7 @@ import { requireAuth } from "@/lib/auth-middleware";
 import { Permission } from "@topupsend/types";
 import { hasPermission } from "@/lib/permissions";
 import { webhookLoggingService } from "@/lib/services/webhook-logging.service";
+import { redactWebhookPayload } from "@/lib/response-sanitize";
 
 /**
  * GET - Get webhook log details
@@ -44,7 +45,11 @@ export async function GET(
       event: log.event,
       source: log.source,
       status: log.status,
-      payload: log.payload,
+      // Stored PG Pay webhook payloads are the raw callback bodies
+      // and contain the full pgPayToken — redact it at the response
+      // layer (the stored row is left as-is for replay/debugging by
+      // the server-side flows that own it).
+      payload: redactWebhookPayload(log.payload),
       headers: log.headers,
       signature: log.signature,
       ipAddress: log.ipAddress,

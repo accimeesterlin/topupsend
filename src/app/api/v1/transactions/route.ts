@@ -4,6 +4,7 @@ import { dbConnection } from '@topupsend/db/connection';
 import { Transaction } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
+import { stripTransactionPgpayToken } from '@/lib/response-sanitize';
 
 /**
  * GET /api/v1/transactions
@@ -51,10 +52,14 @@ export async function GET(request: NextRequest) {
     }
 
     const total = await Transaction.countDocuments(query);
-    const transactions = await Transaction.find(query)
+    const found = await Transaction.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
+
+    // Never hand the PG Pay payment token (bearer material stored
+    // in metadata for server-side binding) out in list responses.
+    const transactions = found.map(stripTransactionPgpayToken);
 
     return NextResponse.json({
       transactions,

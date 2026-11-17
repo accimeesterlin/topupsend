@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 import bcrypt from "bcryptjs";
 
 // GET single customer
@@ -69,6 +71,18 @@ export async function PUT(
       }
     } catch (error) {
       console.log('[Customer Update] Staff auth failed:', error);
+    }
+
+    // The staff path of this route can rewrite any field, set the
+    // customer's password and toggle their 2FA — an org write that
+    // requires EDIT_CUSTOMERS. It was checked nowhere, so a VIEWER
+    // staff session could do all three. (Customer callers updating
+    // themselves take the separate path below and are unaffected.)
+    if (
+      staffSession &&
+      !hasPermission(staffSession.roles, Permission.EDIT_CUSTOMERS)
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // If no staff session, try customer auth (customer portal users)
@@ -275,6 +289,10 @@ export async function DELETE(
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;

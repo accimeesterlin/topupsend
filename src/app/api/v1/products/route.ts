@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Product } from '@topupsend/db';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // GET all products for the organization
 export async function GET(request: NextRequest) {
@@ -62,6 +64,10 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_PRODUCTS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();

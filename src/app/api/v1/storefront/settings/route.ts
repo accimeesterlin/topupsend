@@ -3,8 +3,10 @@ import { requireAuth } from "@/lib/auth-middleware";
 import { dbConnection } from "@topupsend/db/connection";
 import { StorefrontSettings, Organization } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
-import { handleApiError } from "@/lib/api-error";
+import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 /**
  * GET /api/v1/storefront/settings
@@ -79,6 +81,13 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await requireAuth(request);
+
+    if (!hasPermission(session.roles, Permission.EDIT_STOREFRONT_SETTINGS)) {
+      throw ApiErrors.Forbidden(
+        "You do not have permission to edit storefront settings",
+      );
+    }
+
     await dbConnection.connect();
 
     const body = await request.json();

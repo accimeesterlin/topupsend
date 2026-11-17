@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer, CustomerGroup } from "@topupsend/db";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 // POST - Add customer to group
 export async function POST(
@@ -12,6 +14,10 @@ export async function POST(
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;
@@ -88,6 +94,10 @@ export async function DELETE(
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;
