@@ -5,6 +5,7 @@
 
 import { SignJWT, jwtVerify, JWTPayload } from "jose";
 import { cookies } from "next/headers";
+import { Customer, dbConnection } from "@topupsend/db";
 
 /**
  * The customer session secret (F-C9: fail closed).
@@ -66,6 +67,16 @@ export async function createCustomerSession(
 
 /**
  * Get current customer session
+ *
+ * WARNING — claims only: this verifies the JWT signature and expiry
+ * and NOTHING else. It does not check that the customer still exists
+ * or that the token's version is still current, so a logged-out or
+ * password-reset customer keeps passing it until the token expires.
+ * Do NOT authorize API routes with it. Use `requireCustomerAuth`
+ * (throws, RFC-7807 errors) or `getRevalidatedCustomerSession`
+ * (null-on-refusal, same convention as this function) instead. The
+ * remaining callers are the auth-flow routes that need the raw
+ * claims themselves (logout's revocation bump, the 2FA flows).
  */
 export async function getCustomerSession(): Promise<CustomerSessionPayload | null> {
   const token = (await cookies()).get("customer-session")?.value;
@@ -80,6 +91,44 @@ export async function getCustomerSession(): Promise<CustomerSessionPayload | nul
   } catch (_error) {
     return null;
   }
+}
+
+/**
+ * Get the current customer session, revalidated against the customer
+ * record — the same F-M1 revalidation `requireCustomerAuth`
+ * performs, in the null-on-refusal shape of `getCustomerSession` so
+ * routes keep their own error responses.
+ *
+ * Returns null when there is no usable session: no cookie, an
+ * invalid or expired token, a customer record that no longer
+ * exists, or a token minted at a stale tokenVersion (password
+ * reset/change, logout). Before this helper existed, the
+ * customers/[id] PUT authorized its customer path with bare
+ * `getCustomerSession()` and skipped this revalidation entirely —
+ * the customer-token follow-up PR #22 flagged (its staff side was
+ * migrated to `getRevalidatedSession` there).
+ */
+export async function getRevalidatedCustomerSession(): Promise<CustomerSessionPayload | null> {
+  const session = await getCustomerSession();
+
+  if (!session) {
+    return null;
+  }
+
+  await dbConnection.connect();
+  const customer = await Customer.findById(session.customerId).select(
+    "tokenVersion",
+  );
+
+  if (!customer) {
+    return null;
+  }
+
+  if ((session.tv ?? 0) !== (customer.tokenVersion ?? 0)) {
+    return null;
+  }
+
+  return session;
 }
 
 /**
