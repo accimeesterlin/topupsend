@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { CustomerGroup } from "@topupsend/db";
 import { hasPermission } from "@/lib/permissions";
@@ -8,7 +8,7 @@ import { Permission } from "@topupsend/types";
 // GET all customer groups
 export async function GET(_request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -32,7 +32,7 @@ export async function GET(_request: NextRequest) {
 // POST - Create new customer group
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

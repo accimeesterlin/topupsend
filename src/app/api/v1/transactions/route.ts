@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Transaction } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
@@ -12,7 +12,7 @@ import { stripTransactionPgpayToken } from '@/lib/response-sanitize';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest) {
     // anyone could rewrite the recipient name on any tenant's
     // transaction by orderId. Authenticate exactly like the GET
     // handler above and scope the lookup to the caller's org.
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
