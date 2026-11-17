@@ -56,6 +56,11 @@ jest.mock("@/lib/auth", () => ({
 
 jest.mock("@/lib/customer-auth", () => ({
   getCustomerSession: (...args: any[]) => mockGetCustomerSession(...args),
+  // The customers/[id] PUT calls the revalidating helper; in this
+  // suite the fabricated session stands in for an already-revalidated
+  // one.
+  getRevalidatedCustomerSession: (...args: any[]) =>
+    mockGetCustomerSession(...args),
 }));
 
 jest.mock(
