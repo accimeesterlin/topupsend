@@ -2,9 +2,11 @@ import { NextRequest } from 'next/server';
 import { dbConnection } from '@topupsend/db/connection';
 import { Discount } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
 import { requireAuth } from '@/lib/auth-middleware';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * GET /api/v1/discounts/[id]
@@ -47,6 +49,10 @@ export async function PATCH(
   try {
     const { id } = await params;
     const session = await requireAuth(request);
+
+    if (!hasPermission(session.roles, Permission.EDIT_DISCOUNTS)) {
+      throw ApiErrors.Forbidden('You do not have permission to edit discounts');
+    }
 
     await dbConnection.connect();
 
@@ -146,6 +152,10 @@ export async function DELETE(
   try {
     const { id } = await params;
     const session = await requireAuth(request);
+
+    if (!hasPermission(session.roles, Permission.DELETE_DISCOUNTS)) {
+      throw ApiErrors.Forbidden('You do not have permission to delete discounts');
+    }
 
     await dbConnection.connect();
 

@@ -8,6 +8,8 @@ import formData from 'form-data';
 import mailchimp from '@mailchimp/mailchimp_transactional';
 // @ts-expect-error - zeptomail package has types but doesn't export them properly
 import { SendMailClient } from 'zeptomail';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // POST - Test integration connection
 export async function POST(request: NextRequest) {
@@ -15,6 +17,13 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Testing exercises caller-supplied credentials against live
+    // providers (and can send mail through the org's providers);
+    // it also writes test status onto the stored integration.
+    if (!hasPermission(session.roles, Permission.EDIT_INTEGRATIONS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();

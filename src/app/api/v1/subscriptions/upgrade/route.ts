@@ -4,6 +4,8 @@ import { Organization, dbConnection } from "@topupsend/db";
 import { getTierInfo, SubscriptionTier } from "@/lib/pricing";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { PGPayService } from "@/lib/services/pgpay.service";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -15,6 +17,20 @@ export async function POST(req: NextRequest) {
     await dbConnection.connect();
 
     const user = await requireAuth(req);
+
+    // Starting a paid upgrade rewrites the org's pendingUpgrade and
+    // opens a checkout against the org — an org-administration
+    // write. No subscription-specific permission is defined, so
+    // this uses the closest defined one, EDIT_ORG_SETTINGS (held
+    // only by ADMIN in the current role map); previously any
+    // authenticated member, VIEWER included, could initiate it.
+    if (!hasPermission(user.roles, Permission.EDIT_ORG_SETTINGS)) {
+      return createErrorResponse(
+        "You do not have permission to change the subscription",
+        403,
+      );
+    }
+
     const body = await req.json();
     const { tier, months = 1 } = body as {
       tier: SubscriptionTier;

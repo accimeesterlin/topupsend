@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
 import { resolveDingConnectBaseUrl } from '@/lib/services/dingconnect.service';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // GET all integrations for the organization
 export async function GET(_request: NextRequest) {
@@ -59,6 +61,13 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Creating or replacing provider credentials (DingConnect,
+    // email providers) is an org write: EDIT_INTEGRATIONS was
+    // defined for it but never checked on this route.
+    if (!hasPermission(session.roles, Permission.EDIT_INTEGRATIONS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();

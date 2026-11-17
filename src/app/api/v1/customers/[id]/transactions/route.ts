@@ -4,6 +4,7 @@ import { dbConnection } from "@topupsend/db/connection";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { handleApiError } from "@/lib/api-error";
 import { requireCustomerAuthOrApiKey } from "@/lib/auth-middleware";
+import { stripTransactionPgpayToken } from "@/lib/response-sanitize";
 
 export async function GET(
   request: NextRequest,
@@ -53,7 +54,7 @@ export async function GET(
     }
 
     // Get transactions for this customer
-    const [transactions, total] = await Promise.all([
+    const [found, total] = await Promise.all([
       Transaction.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -61,6 +62,10 @@ export async function GET(
         .lean(),
       Transaction.countDocuments(query),
     ]);
+
+    // Strip the PG Pay payment token from every row before it
+    // leaves the server (see the staff transactions list).
+    const transactions = found.map(stripTransactionPgpayToken);
 
     return createSuccessResponse({
       transactions,

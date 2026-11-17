@@ -12,6 +12,8 @@ import {
 } from "@topupsend/db";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 const mergeCustomersSchema = z.object({
   primaryCustomerId: z.string().min(1, "Primary customer ID is required"),
@@ -30,6 +32,10 @@ export async function POST(request: Request) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();

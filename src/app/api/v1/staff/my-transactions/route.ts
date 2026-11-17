@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
 import { Transaction } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
+import { stripTransactionPgpayToken } from "@/lib/response-sanitize";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Get transactions created by this user
-    const [transactions, total] = await Promise.all([
+    const [found, total] = await Promise.all([
       Transaction.find({ createdBy: user.userId })
         .populate("productId", "name country")
         .sort({ createdAt: -1 })
@@ -26,6 +27,10 @@ export async function GET(request: NextRequest) {
         .lean(),
       Transaction.countDocuments({ createdBy: user.userId }),
     ]);
+
+    // Strip the PG Pay payment token from every row before it
+    // leaves the server (see the staff transactions list).
+    const transactions = found.map(stripTransactionPgpayToken);
 
     return createSuccessResponse({
       transactions,

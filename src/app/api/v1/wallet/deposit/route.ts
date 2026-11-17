@@ -3,8 +3,10 @@ import { requireAuth } from '@/lib/auth-middleware';
 import { dbConnection } from '@topupsend/db/connection';
 import { Wallet, WalletTransaction } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * POST /api/v1/wallet/deposit
@@ -14,6 +16,17 @@ import { logger } from '@/lib/logger';
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request);
+
+    // A manual deposit credits the org wallet with a caller-supplied
+    // amount — a money-creation primitive. DEPOSIT_WALLET was
+    // defined for it but never checked, so any authenticated org
+    // member (VIEWER included) could mint wallet funds.
+    if (!hasPermission(session.roles, Permission.DEPOSIT_WALLET)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to deposit to the wallet',
+      );
+    }
+
     await dbConnection.connect();
 
     const body = await request.json();
