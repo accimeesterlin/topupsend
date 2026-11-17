@@ -63,10 +63,14 @@ jest.mock("@/lib/auth-middleware", () => ({
 
 jest.mock("@/lib/auth", () => ({
   getSession: (...args: any[]) => mockGetSession(...args),
+  // Migrated routes call the revalidating helper; in this suite the
+  // fabricated session stands in for an already-revalidated one.
+  getRevalidatedSession: (...args: any[]) => mockGetSession(...args),
 }));
 
 jest.mock("@/lib/customer-auth", () => ({
   getCustomerSession: jest.fn().mockResolvedValue(null),
+  getRevalidatedCustomerSession: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock(

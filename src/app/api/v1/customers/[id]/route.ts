@@ -91,8 +91,16 @@ export async function PUT(
 
       if (customerSessionCookie) {
         try {
-          const { getCustomerSession } = await import("@/lib/customer-auth");
-          const customerSession = await getCustomerSession();
+          // Revalidated, not bare getCustomerSession(): a customer
+          // token revoked server-side (password reset/change,
+          // logout — both bump tokenVersion) must stop working here
+          // immediately, not live out its 7-day expiry with profile
+          // and password-change rights. A refusal falls through to
+          // the same 401 as any other missing auth below.
+          const { getRevalidatedCustomerSession } = await import(
+            "@/lib/customer-auth"
+          );
+          const customerSession = await getRevalidatedCustomerSession();
 
           if (customerSession) {
             isCustomer = true;
