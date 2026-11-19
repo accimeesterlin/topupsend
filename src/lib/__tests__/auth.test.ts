@@ -1,3 +1,10 @@
+/**
+ * @jest-environment node
+ *
+ * (Node environment so `jose` resolves to its Node build — under
+ * jsdom it resolves to the untransformed ESM browser build and this
+ * suite fails to parse. Same fix as auth-hardening.test.ts.)
+ */
 import {
   hashPassword,
   verifyPassword,
@@ -8,6 +15,12 @@ import {
   type SessionPayload,
 } from '../auth';
 import { UserRole } from '@topupsend/types';
+
+// process.env.NODE_ENV is typed as read-only, so tests that need to
+// switch it assign through a mutable view of process.env.
+function setNodeEnv(value: string | undefined) {
+  (process.env as Record<string, string | undefined>).NODE_ENV = value;
+}
 
 describe('Password Hashing', () => {
   describe('hashPassword', () => {
@@ -213,24 +226,24 @@ describe('Session Cookie Management', () => {
 
     it('should include Secure flag in production', () => {
       const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      setNodeEnv('production');
 
       const cookie = createSessionCookie('test-token');
 
       expect(cookie).toContain('Secure');
 
-      process.env.NODE_ENV = originalEnv;
+      setNodeEnv(originalEnv);
     });
 
     it('should not include Secure flag in development', () => {
       const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      setNodeEnv('development');
 
       const cookie = createSessionCookie('test-token');
 
       expect(cookie).not.toContain('Secure');
 
-      process.env.NODE_ENV = originalEnv;
+      setNodeEnv(originalEnv);
     });
 
     it('should not include Secure flag in test', () => {
