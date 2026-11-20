@@ -37,6 +37,12 @@ export async function GET(
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
 
+    // F-H4: the key must belong to the customer's organization —
+    // cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     if (
       apiKey.ownerId !== customer.customerId ||
       apiKey.ownerType !== "customer"
@@ -45,6 +51,13 @@ export async function GET(
     }
   } else {
     const session = await requireAuth(request);
+
+    // F-H4: org check before ownership/permission — a global
+    // permission (e.g. ADMIN's VIEW_API_KEYS) must not reach keys
+    // belonging to another organization.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
 
     const canViewAll = hasPermission(session.roles, Permission.VIEW_API_KEYS);
     const isOwner = apiKey.ownerId === session.userId;
@@ -106,6 +119,11 @@ export async function PUT(
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
 
+    // F-H4: cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     if (
       apiKey.ownerId !== customer.customerId ||
       apiKey.ownerType !== "customer"
@@ -119,6 +137,11 @@ export async function PUT(
     }
   } else {
     const session = await requireAuth(request);
+
+    // F-H4: org check before ownership/permission.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
 
     const canManageAll = hasPermission(
       session.roles,
@@ -185,6 +208,11 @@ export async function DELETE(
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
 
+    // F-H4: cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     if (
       apiKey.ownerId !== customer.customerId ||
       apiKey.ownerType !== "customer"
@@ -193,6 +221,11 @@ export async function DELETE(
     }
   } else {
     const session = await requireAuth(request);
+
+    // F-H4: org check before ownership/permission.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
 
     const canRevokeAll = hasPermission(
       session.roles,

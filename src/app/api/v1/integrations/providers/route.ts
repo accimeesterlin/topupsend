@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
 import { createDingConnectService } from '@/lib/services/dingconnect.service';
@@ -12,7 +12,7 @@ import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
  */
 export async function GET(_request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return createErrorResponse('Unauthorized', 401);
     }

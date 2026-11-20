@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       email: session.email,
       roles: userOrg.roles, // Use roles from the specific organization
       orgId: orgId,
+      tv: user.tokenVersion ?? 0,
     });
 
     logger.info('User switched organization', {

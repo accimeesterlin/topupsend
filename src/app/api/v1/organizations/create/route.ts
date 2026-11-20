@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
         email: session.email,
         roles: [UserRole.ADMIN],
         orgId: org._id.toString(),
+        tv: session.tv ?? 0,
       });
 
       const response = createSuccessResponse(

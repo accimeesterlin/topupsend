@@ -3,8 +3,11 @@ import { requireAuth } from '@/lib/auth-middleware';
 import { dbConnection } from '@topupsend/db/connection';
 import { PaymentProvider } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
+import { sanitizePaymentProvider } from '@/lib/response-sanitize';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * GET /api/v1/payment-providers
@@ -23,18 +26,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Don't expose sensitive credentials in the list
-    const sanitizedProviders = providers.map((p) => ({
-      _id: p._id,
-      provider: p.provider,
-      status: p.status,
-      environment: p.environment,
-      settings: p.settings,
-      metadata: p.metadata,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-      // Only indicate if credentials exist, don't send the actual values
-      hasCredentials: !!(p.credentials && Object.keys(p.credentials).length > 0),
-    }));
+    const sanitizedProviders = providers.map(sanitizePaymentProvider);
 
     return createSuccessResponse({ providers: sanitizedProviders });
   } catch (error) {
@@ -50,6 +42,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request);
+
+    // Creating or replacing gateway credentials is an org write:
+    // EDIT_PAYMENT_SETTINGS was defined for exactly this but never
+    // checked, so any org member (VIEWER included) could replace
+    // the org's Stripe/PayPal/PG Pay credentials.
+    if (!hasPermission(session.roles, Permission.EDIT_PAYMENT_SETTINGS)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to manage payment providers',
+      );
+    }
+
     await dbConnection.connect();
 
     const body = await request.json();

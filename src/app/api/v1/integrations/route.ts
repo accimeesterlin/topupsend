@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
+import { resolveDingConnectBaseUrl } from '@/lib/services/dingconnect.service';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // GET all integrations for the organization
 export async function GET(_request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -55,9 +58,16 @@ export async function GET(_request: NextRequest) {
 // POST - Create or update integration
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Creating or replacing provider credentials (DingConnect,
+    // email providers) is an org write: EDIT_INTEGRATIONS was
+    // defined for it but never checked on this route.
+    if (!hasPermission(session.roles, Permission.EDIT_INTEGRATIONS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -77,6 +87,20 @@ export async function POST(request: NextRequest) {
         { error: 'Environment is required for Reloadly' },
         { status: 400 }
       );
+    }
+
+    // DingConnect baseUrl is allowlisted (F-M8): the stored value is used
+    // for outbound calls carrying the org's API key, so reject anything
+    // that is not the real DingConnect host at save time as well.
+    if (provider === 'dingconnect' && credentials.baseUrl) {
+      try {
+        credentials.baseUrl = resolveDingConnectBaseUrl(credentials.baseUrl);
+      } catch (error: any) {
+        return NextResponse.json(
+          { error: 'Invalid baseUrl', detail: error.message },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate isPrimaryEmail is only for email providers

@@ -24,6 +24,7 @@ import {
   User,
   Shield,
   Receipt,
+  HeartHandshake,
 } from "lucide-react";
 import { Button } from "@topupsend/ui";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,11 @@ const navigationSections = [
       },
       { name: "Audit Logs", href: "/dashboard/audit", icon: Shield },
       { name: "Settings", href: "/dashboard/settings", icon: Settings },
+      {
+        name: "Partner Apps",
+        href: "/dashboard/partner-apps",
+        icon: HeartHandshake,
+      },
     ],
   },
 ];

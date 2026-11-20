@@ -13,6 +13,10 @@ export interface IWebhookLog extends Document {
   orgId: string;
   event: string; // Event type (e.g., 'payment.completed', 'topup.delivered')
   source: WebhookSource;
+  // Provider-assigned (or deterministically derived) id of this specific
+  // event delivery (F-H12). Lets duplicate deliveries be deduplicated at
+  // the data layer instead of by application-level status checks alone.
+  eventId?: string;
 
   // Request data
   payload: any; // Full webhook payload
@@ -65,6 +69,10 @@ const WebhookLogSchema = new Schema<IWebhookLog>(
     event: {
       type: String,
       required: true,
+      index: true,
+    },
+    eventId: {
+      type: String,
       index: true,
     },
     source: {
@@ -129,6 +137,13 @@ const WebhookLogSchema = new Schema<IWebhookLog>(
 );
 
 // Indexes
+WebhookLogSchema.index(
+  { source: 1, eventId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { eventId: { $type: "string" } },
+  },
+);
 WebhookLogSchema.index({ orgId: 1, status: 1, createdAt: -1 });
 WebhookLogSchema.index({ source: 1, event: 1, createdAt: -1 });
 WebhookLogSchema.index({ status: 1, nextRetryAt: 1 });

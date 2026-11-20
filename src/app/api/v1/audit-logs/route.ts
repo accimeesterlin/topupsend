@@ -82,7 +82,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const limit = parseInt(searchParams.get("limit") || "100");
+    // Clamp page size to the platform max (F-M13)
+    const limit = Math.min(parseInt(searchParams.get("limit") || "100"), 100);
 
     // TODO: Replace with actual database query
     // For now, return mock data

@@ -9,6 +9,48 @@ interface DingConnectConfig {
   baseUrl?: string;
 }
 
+/** Default (and only) production DingConnect API base URL. */
+export const DINGCONNECT_DEFAULT_BASE_URL = "https://api.dingconnect.com";
+
+/**
+ * Hosts a DingConnect base URL may point at. DingConnect publishes a single
+ * API host; anything else would receive the org's API key with every
+ * request, so stored/integration-supplied base URLs are pinned to it
+ * (F-M8: stored SSRF / key exfiltration via a tampered `baseUrl`).
+ */
+const DINGCONNECT_ALLOWED_HOSTS = new Set(["api.dingconnect.com"]);
+
+/**
+ * Resolve a configured DingConnect base URL to the exact origin that will
+ * be used for outbound calls. Unset/blank means the default. Any value that
+ * is not an https URL on an allowlisted DingConnect host throws, so a
+ * tampered integration setting fails closed instead of redirecting API
+ * keys to an arbitrary (possibly internal) host.
+ */
+export function resolveDingConnectBaseUrl(baseUrl?: string | null): string {
+  if (!baseUrl || !baseUrl.trim()) {
+    return DINGCONNECT_DEFAULT_BASE_URL;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl.trim());
+  } catch {
+    throw new Error(`Invalid DingConnect base URL: ${baseUrl}`);
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    !DINGCONNECT_ALLOWED_HOSTS.has(parsed.hostname)
+  ) {
+    throw new Error(
+      `Invalid DingConnect base URL: ${baseUrl}. Must be ${DINGCONNECT_DEFAULT_BASE_URL}`,
+    );
+  }
+
+  return `${parsed.protocol}//${parsed.host}`;
+}
+
 interface DingConnectBenefitValue {
   CurrencyCode?: string;
   CurrencySymbol?: string;
@@ -154,7 +196,9 @@ export class DingConnectService {
 
   constructor(config: DingConnectConfig) {
     this.config = config;
-    this.baseUrl = config.baseUrl || 'https://api.dingconnect.com';
+    // Allowlist-validated: a stored baseUrl can never redirect the API key
+    // to a non-DingConnect host (F-M8).
+    this.baseUrl = resolveDingConnectBaseUrl(config.baseUrl);
   }
 
   /**
@@ -168,14 +212,28 @@ export class DingConnectService {
 
     const requestBody = options.body;
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'api_key': this.config.apiKey,
-        ...options.headers,
-      },
-    });
+    // Hard 30s timeout on every provider call (Cluster 1e): without it
+    // a hung connection blocks fulfillment indefinitely and callers
+    // cannot distinguish "slow" from "stuck". A timeout surfaces as a
+    // fetch abort error — which callers must treat as an UNKNOWN
+    // outcome, never as a definite rejection.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'api_key': this.config.apiKey,
+          ...options.headers,
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       let errorDetails: any = { message: 'Unknown error' };

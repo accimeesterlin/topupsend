@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Transaction } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
+import { stripTransactionPgpayToken } from '@/lib/response-sanitize';
 
 /**
  * GET /api/v1/transactions
@@ -11,7 +12,7 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const excludeTestMode = searchParams.get('excludeTestMode') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    // Clamp page size to the platform max (F-M13)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
 
     const query: any = { orgId: session.orgId };
 
@@ -50,10 +52,14 @@ export async function GET(request: NextRequest) {
     }
 
     const total = await Transaction.countDocuments(query);
-    const transactions = await Transaction.find(query)
+    const found = await Transaction.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
+
+    // Never hand the PG Pay payment token (bearer material stored
+    // in metadata for server-side binding) out in list responses.
+    const transactions = found.map(stripTransactionPgpayToken);
 
     return NextResponse.json({
       transactions,
@@ -76,6 +82,15 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    // F-H10: this handler used to have no session check at all —
+    // anyone could rewrite the recipient name on any tenant's
+    // transaction by orderId. Authenticate exactly like the GET
+    // handler above and scope the lookup to the caller's org.
+    const session = await getRevalidatedSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await dbConnection.connect();
 
     const { searchParams } = new URL(request.url);
@@ -94,8 +109,11 @@ export async function PATCH(request: NextRequest) {
 
     logger.info('Updating transaction with customer name', { orderId, customerName });
 
-    // Find transaction
-    const transaction = await Transaction.findOne({ orderId });
+    // Find transaction within the caller's organization only
+    const transaction = await Transaction.findOne({
+      orderId,
+      orgId: session.orgId,
+    });
 
     if (!transaction) {
       logger.error('Transaction not found', { orderId });

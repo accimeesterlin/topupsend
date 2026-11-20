@@ -3,9 +3,11 @@ import { requireAuth } from '@/lib/auth-middleware';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration, Product } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
 import { createDingConnectService } from '@/lib/services/dingconnect.service';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * POST /api/v1/products/sync
@@ -14,6 +16,13 @@ import { createDingConnectService } from '@/lib/services/dingconnect.service';
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request);
+
+    // A sync spends the org's provider quota and rewrites the
+    // catalog — SYNC_PRODUCTS was defined for it but never checked.
+    if (!hasPermission(session.roles, Permission.SYNC_PRODUCTS)) {
+      throw ApiErrors.Forbidden('You do not have permission to sync products');
+    }
+
     await dbConnection.connect();
 
     const body = await request.json();

@@ -2,16 +2,39 @@ import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { UserRole } from '@topupsend/types';
+import { User, dbConnection } from '@topupsend/db';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-);
+/**
+ * The staff session secret (F-C9: fail closed).
+ *
+ * There is deliberately NO fallback literal: if JWT_SECRET is unset,
+ * signing throws and verification rejects every token, instead of
+ * silently trusting a secret printed in the source code. Resolved
+ * lazily on each call so importing this module (build, tests) never
+ * depends on the deployment's env.
+ */
+export function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET environment variable is not set; refusing to sign or verify session tokens'
+    );
+  }
+  return new TextEncoder().encode(secret);
+}
 
 export interface SessionPayload {
   userId: string;
   email: string;
   roles: UserRole[];
   orgId: string;
+  /**
+   * Token version at mint time (F-M1). requireAuth compares it with
+   * the user record's current tokenVersion; a mismatch means the
+   * session has been revoked (password reset, role change,
+   * deactivation, logout). Absent on pre-hardening tokens (= 0).
+   */
+  tv?: number;
 }
 
 /**
@@ -36,7 +59,7 @@ export async function createToken(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(process.env.JWT_EXPIRES_IN || '7d')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 
   return token;
 }
@@ -46,9 +69,11 @@ export async function createToken(payload: SessionPayload): Promise<string> {
  */
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as unknown as SessionPayload;
   } catch (_error) {
+    // Also the fail-closed path: an unset JWT_SECRET lands here and
+    // every token is rejected rather than checked against a fallback.
     return null;
   }
 }
@@ -73,7 +98,18 @@ export function clearSessionCookie(): string {
 }
 
 /**
- * Get the current session from cookies
+ * Get the current session from cookies.
+ *
+ * WARNING — claims only: this verifies the JWT signature and expiry
+ * and NOTHING else. It does not check that the user still exists, is
+ * still active, or that the token's version is still current, so a
+ * deactivated or password-reset user keeps passing it until the
+ * token expires. Do NOT authorize API routes with it. Use
+ * `requireAuth` (throws, RFC-7807 errors) or
+ * `getRevalidatedSession` (null-on-refusal, same convention as this
+ * function) instead. The remaining callers are the auth-flow routes
+ * that need the raw claims themselves (logout's revocation bump,
+ * the 2FA send-code session binding).
  */
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
@@ -84,4 +120,41 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 
   return verifyToken(sessionCookie.value);
+}
+
+/**
+ * Get the current session, revalidated against the user record —
+ * the same F-M1 revalidation `requireAuth` performs, in the
+ * null-on-refusal shape of `getSession` so routes keep their own
+ * error responses.
+ *
+ * Returns null when there is no usable session: no cookie, an
+ * invalid or expired token, a user record that no longer exists or
+ * has been deactivated, or a token minted at a stale tokenVersion
+ * (password reset/change, role change, org-member removal, logout).
+ * Before this helper existed, 21 route files authorized with bare
+ * `getSession()` and skipped this revalidation entirely (sweep
+ * finding N3 — the F-M1 fix was partial).
+ */
+export async function getRevalidatedSession(): Promise<SessionPayload | null> {
+  const session = await getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  await dbConnection.connect();
+  const user = await User.findById(session.userId).select(
+    'isActive tokenVersion',
+  );
+
+  if (!user || !user.isActive) {
+    return null;
+  }
+
+  if ((session.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    return null;
+  }
+
+  return session;
 }

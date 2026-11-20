@@ -7,6 +7,7 @@ import mailchimp from "@mailchimp/mailchimp_transactional";
 // @ts-expect-error - zeptomail package has types but doesn't export them properly
 import { SendMailClient } from "zeptomail";
 import { logger } from "@/lib/logger";
+import { escapeHtml } from "@/lib/escape-html";
 
 export interface EmailOptions {
   to: string;
@@ -244,6 +245,11 @@ export class EmailService {
     tempPassword?: string,
   ): Promise<void> {
     const subject = `You've been invited to join ${orgName}`;
+    // HTML-body variants (F-M14): inviter/org names are org-controlled and
+    // must not inject markup into mail the invitee receives.
+    const inviterNameHtml = escapeHtml(inviterName);
+    const orgNameHtml = escapeHtml(orgName);
+    const tempPasswordHtml = tempPassword ? escapeHtml(tempPassword) : "";
 
     const html = `
 <!DOCTYPE html>
@@ -264,7 +270,7 @@ export class EmailService {
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      <strong>${inviterName}</strong> has invited you to join <strong>${orgName}</strong> on our prepaid minutes platform.
+      <strong>${inviterNameHtml}</strong> has invited you to join <strong>${orgNameHtml}</strong> on our prepaid minutes platform.
     </p>
 
     ${
@@ -273,7 +279,7 @@ export class EmailService {
     <div style="background: #f9fafb; border-left: 4px solid #667eea; padding: 16px; margin: 24px 0; border-radius: 4px;">
       <p style="margin: 0 0 12px 0; font-weight: 600; color: #374151;">Your Temporary Password:</p>
       <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 18px; color: #667eea; letter-spacing: 1px;">
-        <strong>${tempPassword}</strong>
+        <strong>${tempPasswordHtml}</strong>
       </p>
       <p style="margin: 12px 0 0 0; font-size: 14px; color: #6b7280;">
         Please change this password after your first login for security.
@@ -296,13 +302,13 @@ export class EmailService {
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 16px;">
       Best regards,<br>
-      The ${orgName} Team
+      The ${orgNameHtml} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgName}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgNameHtml}. All rights reserved.</p>
   </div>
 </body>
 </html>
@@ -342,6 +348,7 @@ The ${orgName} Team
   ): Promise<void> {
     const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://prepaid.pgecom.com"}/reset-password?token=${resetToken}`;
     const subject = "Reset Your Password";
+    const orgNameHtml = escapeHtml(orgName);
 
     const html = `
 <!DOCTYPE html>
@@ -362,7 +369,7 @@ The ${orgName} Team
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      We received a request to reset your password for your ${orgName} account.
+      We received a request to reset your password for your ${orgNameHtml} account.
     </p>
 
     <div style="text-align: center; margin: 32px 0;">
@@ -382,13 +389,13 @@ The ${orgName} Team
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
       Best regards,<br>
-      The ${orgName} Team
+      The ${orgNameHtml} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgName}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgNameHtml}. All rights reserved.</p>
   </div>
 </body>
 </html>
@@ -445,6 +452,14 @@ The ${orgName} Team
 
     const greeting = customerName ? `Hello ${customerName},` : "Hello,";
     const subject = `Your top-up order ${orderId} has been refunded`;
+    // HTML-body variants (F-M14): customer/org names, the order id and the
+    // currency label are data-controlled and must not inject markup.
+    const greetingHtml = customerName
+      ? `Hello ${escapeHtml(customerName)},`
+      : "Hello,";
+    const orderIdHtml = escapeHtml(orderId);
+    const currencyHtml = escapeHtml(currency);
+    const orgNameHtml = escapeHtml(orgName);
 
     const html = `
 <!DOCTYPE html>
@@ -461,11 +476,11 @@ The ${orgName} Team
 
   <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
     <p style="font-size: 16px; margin-bottom: 20px;">
-      ${greeting}
+      ${greetingHtml}
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      We were unable to complete your top-up order <strong>${orderId}</strong>. A refund of <strong>${currency} ${refundAmount.toFixed(2)}</strong> has been credited to your account balance.
+      We were unable to complete your top-up order <strong>${orderIdHtml}</strong>. A refund of <strong>${currencyHtml} ${refundAmount.toFixed(2)}</strong> has been credited to your account balance.
     </p>
 
     <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; margin: 24px 0; border-radius: 4px;">
@@ -473,15 +488,15 @@ The ${orgName} Team
       <table style="width: 100%; font-size: 14px; color: #374151;">
         <tr>
           <td style="padding: 4px 0;">Order ID:</td>
-          <td style="padding: 4px 0; text-align: right; font-weight: 600;">${orderId}</td>
+          <td style="padding: 4px 0; text-align: right; font-weight: 600;">${orderIdHtml}</td>
         </tr>
         <tr>
           <td style="padding: 4px 0;">Refund Amount:</td>
-          <td style="padding: 4px 0; text-align: right; font-weight: 600; color: #22c55e;">${currency} ${refundAmount.toFixed(2)}</td>
+          <td style="padding: 4px 0; text-align: right; font-weight: 600; color: #22c55e;">${currencyHtml} ${refundAmount.toFixed(2)}</td>
         </tr>
         <tr>
           <td style="padding: 4px 0;">New Account Balance:</td>
-          <td style="padding: 4px 0; text-align: right; font-weight: 600;">${currency} ${newBalance.toFixed(2)}</td>
+          <td style="padding: 4px 0; text-align: right; font-weight: 600;">${currencyHtml} ${newBalance.toFixed(2)}</td>
         </tr>
       </table>
     </div>
@@ -503,13 +518,13 @@ The ${orgName} Team
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 16px;">
       Best regards,<br>
-      The ${orgName} Team
+      The ${orgNameHtml} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgName}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgNameHtml}. All rights reserved.</p>
   </div>
 </body>
 </html>

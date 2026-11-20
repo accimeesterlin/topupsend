@@ -54,6 +54,9 @@ export async function POST(request: NextRequest) {
       customer.twoFactorCode = undefined;
       customer.twoFactorCodeExpiry = undefined;
       customer.twoFactorVerified = false;
+      customer.twoFactorAttempts = 0;
+      customer.twoFactorPendingId = undefined;
+      customer.twoFactorPendingExpires = undefined;
     }
 
     console.log("[2FA Toggle] Saving customer with new state...");

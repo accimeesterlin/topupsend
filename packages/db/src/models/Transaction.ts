@@ -14,7 +14,13 @@ export interface ITransaction extends Document {
     | "completed"
     | "failed"
     | "refunded";
-  paymentGateway?: "stripe" | "paypal" | "pgpay" | "balance" | "manual";
+  paymentGateway?:
+    | "stripe"
+    | "paypal"
+    | "pgpay"
+    | "balance"
+    | "manual"
+    | "partner";
   paymentId?: string;
   paymentType: "gateway" | "balance" | "admin_assigned";
   provider: "dingconnect" | "reloadly";
@@ -59,6 +65,8 @@ export interface ITransaction extends Document {
     // Payment gateway tokens
     pgpayToken?: string;
     pgpayOrderId?: string;
+    // Partner API idempotency (POST /api/v1/partner/topups)
+    idempotencyKey?: string;
     // Device & browser (parsed from user-agent)
     deviceType?: string;
     browserName?: string;
@@ -134,7 +142,7 @@ const TransactionSchema = new Schema<ITransaction>(
     },
     paymentGateway: {
       type: String,
-      enum: ["stripe", "paypal", "pgpay", "balance", "manual"],
+      enum: ["stripe", "paypal", "pgpay", "balance", "manual", "partner"],
     },
     paymentId: {
       type: String,
@@ -221,6 +229,11 @@ const TransactionSchema = new Schema<ITransaction>(
       // Payment gateway tokens
       pgpayToken: String,
       pgpayOrderId: String,
+      // Partner API idempotency key (see payments/process for the
+      // same field on PGPay checkouts; declared explicitly here so
+      // Mongoose persists it — nested metadata paths drop undeclared
+      // keys under strict mode)
+      idempotencyKey: String,
       // Device & browser (parsed from user-agent)
       deviceType: String,
       browserName: String,
@@ -258,7 +271,30 @@ const TransactionSchema = new Schema<ITransaction>(
 TransactionSchema.index({ orgId: 1, status: 1, createdAt: -1 });
 TransactionSchema.index({ "recipient.phoneNumber": 1 });
 TransactionSchema.index({ createdAt: -1 });
-TransactionSchema.index({ paymentGateway: 1, paymentId: 1 });
+// Idempotency keys (F-H12): a gateway payment id and a provider
+// transaction id may each identify at most ONE transaction. Partial
+// indexes so the many transactions without these ids don't collide.
+TransactionSchema.index(
+  { paymentGateway: 1, paymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { paymentId: { $type: "string" } },
+  },
+);
+TransactionSchema.index(
+  { providerTransactionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { providerTransactionId: { $type: "string" } },
+  },
+);
+TransactionSchema.index(
+  { "metadata.pgpayToken": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "metadata.pgpayToken": { $type: "string" } },
+  },
+);
 TransactionSchema.index({ createdBy: 1, createdAt: -1 });
 TransactionSchema.index({ orgId: 1, createdBy: 1, status: 1 });
 TransactionSchema.index({ orgId: 1, paymentType: 1 });

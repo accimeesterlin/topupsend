@@ -12,6 +12,7 @@ import { dbConnection } from "@topupsend/db/connection";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
 import { sendEmail } from "@/lib/services/email.service";
+import { escapeHtml } from "@/lib/escape-html";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -99,7 +100,7 @@ function buildResetEmailHtml(name: string, resetUrl: string): string {
         </div>
         
         <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-          <p style="font-size: 16px;">Hi ${name},</p>
+          <p style="font-size: 16px;">Hi ${escapeHtml(name)},</p>
           
           <p style="font-size: 16px;">
             We received a request to reset your password. Click the button below to create a new password:
