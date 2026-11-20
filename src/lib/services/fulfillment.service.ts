@@ -841,6 +841,7 @@ export async function fulfillPaidTransaction(
 export type SettleStuckTransferResult =
   | "completed"
   | "refunded"
+  | "failed"
   | "unknown"
   | "skipped";
 
@@ -924,6 +925,23 @@ export async function settleStuckTransfer(
   }
 
   if (finalResult.Status === "Failed") {
+    // Partner sends (paymentGateway "partner") have no customer and
+    // no customer payment to refund: processRefund would find or
+    // CREATE a customer by phone and credit their balance with money
+    // nobody paid, while the partner (e.g. PGecom) refunds its own
+    // organization separately. A failed partner transfer simply
+    // records "failed" for the partner to read.
+    if ((transaction as { paymentGateway?: string }).paymentGateway === "partner") {
+      transaction.status = "failed";
+      transaction.timeline.failedAt = new Date();
+      transaction.metadata.failureReason =
+        finalResult.ErrorMessage ||
+        "DingConnect transfer failed (confirmed by status poll)";
+      (transaction.metadata as Record<string, unknown>).dingconnectErrorCode =
+        finalResult.ErrorCode;
+      await transaction.save();
+      return "failed";
+    }
     await processRefund({
       transaction,
       failureReason:
