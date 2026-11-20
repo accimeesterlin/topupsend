@@ -4,6 +4,9 @@
 import { getPgSsoConfig, isPgSsoConfigured, PG_SSO_SCOPES } from './config';
 
 const ENV_KEYS = [
+  'PG_SSO_CLIENT_ID',
+  'PG_SSO_CLIENT_SECRET',
+  'PG_SSO_ISSUER_URL',
   'PG_SSO_SANDBOX_CLIENT_ID',
   'PG_SSO_SANDBOX_CLIENT_SECRET',
   'PG_SSO_SANDBOX_ISSUER_URL',
@@ -26,7 +29,12 @@ afterEach(() => {
   }
 });
 
-function configureSandbox() {
+function configureClient() {
+  process.env.PG_SSO_CLIENT_ID = 'topupsend-client';
+  process.env.PG_SSO_CLIENT_SECRET = 'client-secret';
+}
+
+function configureLegacyClient() {
   process.env.PG_SSO_SANDBOX_CLIENT_ID = 'topupsend-sandbox';
   process.env.PG_SSO_SANDBOX_CLIENT_SECRET = 'sandbox-secret';
 }
@@ -38,27 +46,50 @@ describe('getPgSsoConfig', () => {
   });
 
   it('returns null when only half the credential pair is set', () => {
-    process.env.PG_SSO_SANDBOX_CLIENT_ID = 'topupsend-sandbox';
+    process.env.PG_SSO_CLIENT_ID = 'topupsend-client';
     expect(getPgSsoConfig()).toBeNull();
-    delete process.env.PG_SSO_SANDBOX_CLIENT_ID;
-    process.env.PG_SSO_SANDBOX_CLIENT_SECRET = 'sandbox-secret';
+    delete process.env.PG_SSO_CLIENT_ID;
+    process.env.PG_SSO_CLIENT_SECRET = 'client-secret';
     expect(getPgSsoConfig()).toBeNull();
   });
 
-  it('resolves the sandbox client with the default PG issuer', () => {
-    configureSandbox();
+  it('resolves the client with the default PG issuer', () => {
+    configureClient();
     expect(getPgSsoConfig()).toEqual({
       issuer: 'https://sandbox.pgecom.com',
+      clientId: 'topupsend-client',
+      clientSecret: 'client-secret',
+    });
+    expect(isPgSsoConfigured()).toBe(true);
+  });
+
+  it('honors an issuer override and trims a trailing slash', () => {
+    configureClient();
+    process.env.PG_SSO_ISSUER_URL = 'https://staging.pgecom.example/';
+    expect(getPgSsoConfig()?.issuer).toBe('https://staging.pgecom.example');
+  });
+
+  it('still resolves the client from the legacy variable names alone', () => {
+    configureLegacyClient();
+    process.env.PG_SSO_SANDBOX_ISSUER_URL = 'https://legacy.pgecom.example/';
+    expect(getPgSsoConfig()).toEqual({
+      issuer: 'https://legacy.pgecom.example',
       clientId: 'topupsend-sandbox',
       clientSecret: 'sandbox-secret',
     });
     expect(isPgSsoConfigured()).toBe(true);
   });
 
-  it('honors an issuer override and trims a trailing slash', () => {
-    configureSandbox();
-    process.env.PG_SSO_SANDBOX_ISSUER_URL = 'https://staging.pgecom.example/';
-    expect(getPgSsoConfig()?.issuer).toBe('https://staging.pgecom.example');
+  it('prefers the current variable names when both generations are set', () => {
+    configureLegacyClient();
+    configureClient();
+    process.env.PG_SSO_SANDBOX_ISSUER_URL = 'https://legacy.pgecom.example';
+    process.env.PG_SSO_ISSUER_URL = 'https://current.pgecom.example';
+    expect(getPgSsoConfig()).toEqual({
+      issuer: 'https://current.pgecom.example',
+      clientId: 'topupsend-client',
+      clientSecret: 'client-secret',
+    });
   });
 
   it('requests identity scopes only', () => {
