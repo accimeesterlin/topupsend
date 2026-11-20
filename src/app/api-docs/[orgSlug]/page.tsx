@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Shield,
-  Zap,
-  Book,
-  Copy,
-  Check,
-} from "lucide-react";
+import { Shield, Zap, Book, Copy, Check } from "lucide-react";
 
+/**
+ * Partner API documentation.
+ *
+ * This page documents ONLY the endpoints that actually exist for
+ * API-key callers: the partner API under /api/v1/partner/*. (It
+ * previously described endpoints that were never implemented —
+ * GET /api/v1/balance, POST /api/v1/transactions, customer balance
+ * routes — those have been removed.)
+ */
 export default function ApiDocsPage({
   params,
 }: {
@@ -61,11 +64,12 @@ export default function ApiDocsPage({
       {/* Hero Section */}
       <div className="text-center mb-16">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Prepaid Minutes API Documentation
+          Partner API Documentation
         </h1>
         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          Build powerful integrations with our RESTful API. Send prepaid mobile
-          top-ups programmatically to customers worldwide.
+          Send prepaid mobile top-ups programmatically with a staff API
+          key. The key is bound to one organization — every request acts
+          on that organization only.
         </p>
       </div>
 
@@ -73,9 +77,10 @@ export default function ApiDocsPage({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <Zap className="h-8 w-8 text-indigo-600 mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Fast & Reliable</h3>
+          <h3 className="font-semibold text-lg mb-2">Server-to-Server</h3>
           <p className="text-gray-600 text-sm">
-            99.9% uptime with automatic retries and webhook notifications
+            Look up products and prices, send top-ups, and read a
+            send&apos;s status — no browser session involved.
           </p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -83,76 +88,19 @@ export default function ApiDocsPage({
           <h3 className="font-semibold text-lg mb-2">Secure</h3>
           <p className="text-gray-600 text-sm">
             API key authentication with rate limiting and scope-based
-            permissions
+            permissions. Sends require an Idempotency-Key, so retries
+            never double-send.
           </p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <Book className="h-8 w-8 text-indigo-600 mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Well Documented</h3>
+          <h3 className="font-semibold text-lg mb-2">Accurate</h3>
           <p className="text-gray-600 text-sm">
-            Clear examples in multiple languages with detailed error codes
+            Every endpoint documented below exists and is implemented
+            exactly as shown.
           </p>
         </div>
       </div>
-
-      {/* Getting Started */}
-      <section id="getting-started" className="mb-16 scroll-mt-20">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">
-          Getting Started
-        </h2>
-        <div className="bg-white rounded-lg shadow-sm border p-8 space-y-6">
-          <div>
-            <h3 className="text-xl font-semibold mb-3">1. Get Your API Key</h3>
-            <p className="text-gray-600 mb-4">
-              Navigate to your dashboard and create a new API key with the
-              required scopes. Each API key has specific permissions (scopes)
-              that determine what actions it can perform.
-            </p>
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-              <p className="text-sm text-blue-900">
-                <strong>Note:</strong> Keep your API key secret! Never share it
-                publicly or commit it to version control.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">
-              2. Make Your First Request
-            </h3>
-            <p className="text-gray-600 mb-4">
-              All API requests should include your API key in the Authorization
-              header:
-            </p>
-            <CodeBlock
-              id="first-request"
-              language="bash"
-              code={`curl -X GET https://api.example.com/api/v1/balance \\
-  -H "Authorization: Bearer sk_live_your_api_key_here"`}
-            />
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">3. Handle Responses</h3>
-            <p className="text-gray-600 mb-4">
-              All successful responses return JSON with a consistent structure:
-            </p>
-            <CodeBlock
-              id="response-format"
-              language="json"
-              code={`{
-  "success": true,
-  "data": {
-    // Response data here
-  },
-  "metadata": {
-    "message": "Request successful"
-  }
-}`}
-            />
-          </div>
-        </div>
-      </section>
 
       {/* Authentication */}
       <section id="authentication" className="mb-16 scroll-mt-20">
@@ -160,640 +108,318 @@ export default function ApiDocsPage({
           Authentication
         </h2>
         <div className="bg-white rounded-lg shadow-sm border p-8 space-y-6">
-          <div>
-            <h3 className="text-xl font-semibold mb-3">
-              API Key Authentication
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Include your API key in every request using the Authorization
-              header with Bearer token:
-            </p>
-            <CodeBlock
-              id="auth-header"
-              language="bash"
-              code={`Authorization: Bearer sk_live_your_api_key_here`}
-            />
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Rate Limiting</h3>
-            <p className="text-gray-600 mb-4">API keys have two rate limits:</p>
-            <ul className="list-disc list-inside space-y-2 text-gray-600 mb-4">
-              <li>
-                <strong>Per-Key Limit:</strong> Default 1,000 requests per hour
-                per API key
-              </li>
-              <li>
-                <strong>Organization Limit:</strong> Default 10,000 requests per
-                hour across all keys
-              </li>
-            </ul>
-            <p className="text-gray-600 mb-4">
-              Rate limit information is included in response headers:
-            </p>
-            <CodeBlock
-              id="rate-limit-headers"
-              language="bash"
-              code={`X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 985
-X-RateLimit-Reset: 1640995200`}
-            />
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Scopes</h3>
-            <p className="text-gray-600 mb-4">
-              Each API key has specific scopes that determine what operations it
-              can perform:
-            </p>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Scope
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Description
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      balance:read
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      View account balance
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      balance:write
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Modify account balance (admin only)
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      transactions:read
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      View transaction history
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      transactions:create
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Create new transactions
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">topup:send</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Send mobile top-ups
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      customer:read
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Read customer information
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      customer:update
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Update customer information
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      webhooks:read
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      View webhook logs
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">admin:*</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Full administrative access
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <p className="text-gray-600">
+            Create a staff API key in your dashboard (Settings → API
+            Keys) with the scopes you need, and send it on every request
+            in either header:
+          </p>
+          <CodeBlock
+            id="auth-header"
+            language="bash"
+            code={`X-API-Key: sk_live_your_api_key_here
+# or
+Authorization: Bearer sk_live_your_api_key_here`}
+          />
+          <p className="text-gray-600">
+            The key determines the organization for every call — you
+            never send an organization id or slug. Keys are rate limited
+            (default 1,000 requests/hour per key, 10,000/hour per
+            organization); a breached limit returns HTTP 429.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Scope
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Used by
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td className="px-6 py-4 font-mono text-sm">topup:send</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Lookup, providers list, and sending top-ups
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 font-mono text-sm">
+                    transactions:read
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Reading a top-up&apos;s status by order id
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
 
       {/* Endpoints */}
       <section id="endpoints" className="mb-16 scroll-mt-20">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">API Endpoints</h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-6">Endpoints</h2>
 
-        {/* Balance Endpoints */}
-        <div className="bg-white rounded-lg shadow-sm border p-8 mb-6">
-          <h3 className="text-2xl font-semibold mb-4">Balance</h3>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded font-mono text-sm font-semibold">
-                  GET
-                </span>
-                <code className="text-lg">/api/v1/customers/:id/balance</code>
-              </div>
-              <p className="text-gray-600 mb-3">
-                Get customer balance information
-              </p>
-              <p className="text-sm text-gray-500 mb-3">
-                <strong>Required scope:</strong> balance:read
-              </p>
-
-              <h4 className="font-semibold mb-2">Example Request (cURL)</h4>
-              <CodeBlock
-                id="balance-get-curl"
-                language="bash"
-                code={`curl -X GET https://api.example.com/api/v1/customers/123/balance \\
-  -H "Authorization: Bearer sk_live_your_api_key_here"`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (JavaScript)
-              </h4>
-              <CodeBlock
-                id="balance-get-js"
-                language="javascript"
-                code={`const response = await fetch('https://api.example.com/api/v1/customers/123/balance', {
-  headers: {
-    'Authorization': 'Bearer sk_live_your_api_key_here'
-  }
-});
-const data = await response.json();
-console.log(data);`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (Python)
-              </h4>
-              <CodeBlock
-                id="balance-get-python"
-                language="python"
-                code={`import requests
-
-headers = {
-    'Authorization': 'Bearer sk_live_your_api_key_here'
-}
-
-response = requests.get(
-    'https://api.example.com/api/v1/customers/123/balance',
-    headers=headers
-)
-
-data = response.json()
-print(data)`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">Response</h4>
-              <CodeBlock
-                id="balance-get-response"
-                language="json"
-                code={`{
-  "success": true,
-  "data": {
-    "currentBalance": 100.50,
-    "currency": "USD",
-    "totalAssigned": 500.00,
-    "totalUsed": 399.50
-  }
-}`}
-              />
+        <div className="bg-white rounded-lg shadow-sm border p-8 mb-6 space-y-10">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded font-mono text-sm font-semibold">
+                POST
+              </span>
+              <code className="text-lg">/api/v1/partner/lookup</code>
             </div>
-          </div>
-        </div>
-
-        {/* Transaction Endpoints */}
-        <div className="bg-white rounded-lg shadow-sm border p-8 mb-6">
-          <h3 className="text-2xl font-semibold mb-4">Transactions</h3>
-
-          <div className="space-y-8">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded font-mono text-sm font-semibold">
-                  POST
-                </span>
-                <code className="text-lg">/api/v1/transactions</code>
-              </div>
-              <p className="text-gray-600 mb-3">
-                Create a new transaction (send top-up)
-              </p>
-              <p className="text-sm text-gray-500 mb-3">
-                <strong>Required scope:</strong> transactions:create, topup:send
-              </p>
-
-              <h4 className="font-semibold mb-2">Request Body</h4>
-              <CodeBlock
-                id="transaction-create-body"
-                language="json"
-                code={`{
-  "productId": "prod_123abc",
-  "recipientPhone": "+1234567890",
-  "paymentType": "balance"
-}`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (cURL)
-              </h4>
-              <CodeBlock
-                id="transaction-create-curl"
-                language="bash"
-                code={`curl -X POST https://api.example.com/api/v1/transactions \\
-  -H "Authorization: Bearer sk_live_your_api_key_here" \\
+            <p className="text-gray-600 mb-3">
+              Detect the operator for a phone number and list its
+              products with your organization&apos;s pricing — the same
+              payload the public storefront lookup returns. Required
+              scope: <code>topup:send</code>.
+            </p>
+            <CodeBlock
+              id="lookup-curl"
+              language="bash"
+              code={`curl -X POST /api/v1/partner/lookup \\
+  -H "X-API-Key: sk_live_your_api_key_here" \\
   -H "Content-Type: application/json" \\
+  -d '{ "phoneNumber": "+50934748112" }'`}
+            />
+            <h4 className="font-semibold mt-4 mb-2">Response (abridged)</h4>
+            <CodeBlock
+              id="lookup-response"
+              language="json"
+              code={`{
+  "phoneNumber": "50934748112",
+  "country": { "code": "HT", "name": "Haiti" },
+  "detectedOperators": [{ "code": "DIGHT", "name": "Digicel", "logo": "..." }],
+  "operators": [{ "code": "DIGHT", "name": "Digicel", "logo": "..." }],
+  "products": [{
+    "skuCode": "...",
+    "name": "...",
+    "providerCode": "DIGHT",
+    "pricing": { "costPrice": 9.5, "markup": 0.5, "finalPrice": 10, "discountApplied": false },
+    "isVariableValue": false
+  }],
+  "totalProducts": 1,
+  "testMode": false
+}`}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-green-100 text-green-800 rounded font-mono text-sm font-semibold">
+                GET
+              </span>
+              <code className="text-lg">/api/v1/partner/providers</code>
+            </div>
+            <p className="text-gray-600 mb-3">
+              List all DingConnect providers (countries and operators)
+              available to your organization. Required scope:{" "}
+              <code>topup:send</code>.
+            </p>
+            <CodeBlock
+              id="providers-curl"
+              language="bash"
+              code={`curl /api/v1/partner/providers \\
+  -H "X-API-Key: sk_live_your_api_key_here"`}
+            />
+            <h4 className="font-semibold mt-4 mb-2">Response (abridged)</h4>
+            <CodeBlock
+              id="providers-response"
+              language="json"
+              code={`{
+  "providers": [{
+    "ProviderCode": "DIGHT",
+    "ProviderName": "Digicel",
+    "CountryIso": "HT",
+    "RegionCode": "...",
+    "LogoUrl": "...",
+    "CurrencyCode": "HTG"
+  }],
+  "count": 1
+}`}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded font-mono text-sm font-semibold">
+                POST
+              </span>
+              <code className="text-lg">/api/v1/partner/topups</code>
+            </div>
+            <p className="text-gray-600 mb-3">
+              Send a top-up. Pricing is resolved server-side from the
+              SKU — never send a price. The{" "}
+              <code>Idempotency-Key</code> header is{" "}
+              <strong>required</strong>: repeating a request with the
+              same key returns the original transaction instead of
+              sending again. Set <code>testMode: true</code> to validate
+              only (no delivery) for this request. Required scope:{" "}
+              <code>topup:send</code>.
+            </p>
+            <CodeBlock
+              id="send-curl"
+              language="bash"
+              code={`curl -X POST /api/v1/partner/topups \\
+  -H "X-API-Key: sk_live_your_api_key_here" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: 3f9c1e2a-your-unique-key" \\
   -d '{
-    "productId": "prod_123abc",
-    "recipientPhone": "+1234567890",
-    "paymentType": "balance"
+    "phoneNumber": "+50934748112",
+    "skuCode": "SKU_FROM_LOOKUP",
+    "sendValue": 10,
+    "testMode": false
   }'`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (JavaScript)
-              </h4>
-              <CodeBlock
-                id="transaction-create-js"
-                language="javascript"
-                code={`const response = await fetch('https://api.example.com/api/v1/transactions', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer sk_live_your_api_key_here',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    productId: 'prod_123abc',
-    recipientPhone: '+1234567890',
-    paymentType: 'balance'
-  })
-});
-const data = await response.json();`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (Python)
-              </h4>
-              <CodeBlock
-                id="transaction-create-python"
-                language="python"
-                code={`import requests
-
-headers = {
-    'Authorization': 'Bearer sk_live_your_api_key_here',
-    'Content-Type': 'application/json'
-}
-
-payload = {
-    'productId': 'prod_123abc',
-    'recipientPhone': '+1234567890',
-    'paymentType': 'balance'
-}
-
-response = requests.post(
-    'https://api.example.com/api/v1/transactions',
-    headers=headers,
-    json=payload
-)
-
-data = response.json()
-print(data)`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">Response</h4>
-              <CodeBlock
-                id="transaction-create-response"
-                language="json"
-                code={`{
-  "success": true,
-  "data": {
-    "_id": "txn_456def",
-    "amount": 10.00,
-    "status": "pending",
-    "recipientPhone": "+1234567890",
-    "createdAt": "2024-01-15T10:30:00Z"
-  }
-}`}
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded font-mono text-sm font-semibold">
-                  GET
-                </span>
-                <code className="text-lg">
-                  /api/v1/customers/:id/transactions
-                </code>
-              </div>
-              <p className="text-gray-600 mb-3">
-                Get transaction history for a customer
-              </p>
-              <p className="text-sm text-gray-500 mb-3">
-                <strong>Required scope:</strong> transactions:read
-              </p>
-
-              <h4 className="font-semibold mb-2">Query Parameters</h4>
-              <ul className="list-disc list-inside space-y-1 text-gray-600 mb-3">
-                <li>
-                  <code>page</code> - Page number (default: 1)
-                </li>
-                <li>
-                  <code>limit</code> - Results per page (default: 20, max: 100)
-                </li>
-                <li>
-                  <code>testMode</code> - Filter by test mode: "true" (test
-                  only), "false" (live only), or omit for all
-                </li>
-              </ul>
-
-              <CodeBlock
-                id="transactions-list-curl"
-                language="bash"
-                code={`curl -X GET "https://api.example.com/api/v1/customers/123/transactions?page=1&limit=20&testMode=false" \\
-  -H "Authorization: Bearer sk_live_your_api_key_here"`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Test Mode Endpoint */}
-        <div className="bg-white rounded-lg shadow-sm border p-8 mb-6">
-          <h3 className="text-2xl font-semibold mb-4">Test Mode</h3>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded font-mono text-sm font-semibold">
-                  GET
-                </span>
-                <code className="text-lg">
-                  /api/v1/customer-portal/:orgSlug/test-mode
-                </code>
-              </div>
-              <p className="text-gray-600 mb-3">
-                Check if an organization is in test mode (public endpoint, no
-                authentication required)
-              </p>
-              <p className="text-sm text-gray-500 mb-3">
-                <strong>Required scope:</strong> None (public endpoint)
-              </p>
-
-              <h4 className="font-semibold mb-2">Path Parameters</h4>
-              <ul className="list-disc list-inside space-y-1 text-gray-600 mb-3">
-                <li>
-                  <code>orgSlug</code> - Organization slug
-                </li>
-              </ul>
-
-              <h4 className="font-semibold mb-2">Example Request (cURL)</h4>
-              <CodeBlock
-                id="test-mode-curl"
-                language="bash"
-                code={`curl -X GET https://api.example.com/api/v1/customer-portal/your-org-slug/test-mode`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">
-                Example Request (JavaScript)
-              </h4>
-              <CodeBlock
-                id="test-mode-js"
-                language="javascript"
-                code={`const response = await fetch('https://api.example.com/api/v1/customer-portal/your-org-slug/test-mode');
-const data = await response.json();
-console.log('Test mode:', data.testMode);`}
-              />
-
-              <h4 className="font-semibold mt-4 mb-2">Response</h4>
-              <CodeBlock
-                id="test-mode-response"
-                language="json"
-                code={`{
-  "success": true,
-  "data": {
-    "testMode": true,
-    "orgSlug": "your-org-slug",
-    "orgName": "Your Organization Name"
-  }
-}`}
-              />
-
-              <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                <p className="text-sm text-orange-800">
-                  <strong>Note:</strong> When test mode is enabled, all
-                  transactions are validated but not actually processed by the
-                  provider. This is useful for testing your integration without
-                  incurring real charges or sending real top-ups.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Webhooks */}
-      <section id="webhooks" className="mb-16 scroll-mt-20">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">Webhooks</h2>
-        <div className="bg-white rounded-lg shadow-sm border p-8 space-y-6">
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Overview</h3>
-            <p className="text-gray-600 mb-4">
-              Webhooks allow you to receive real-time notifications when events
-              occur in your account. Configure webhook URLs in your dashboard to
-              receive POST requests for transaction updates.
+            />
+            <p className="text-sm text-gray-500 mt-3">
+              <code>sendValue</code> is required only for
+              variable-value products (see <code>isVariableValue</code>{" "}
+              in the lookup response).
             </p>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Webhook Events</h3>
-            <ul className="list-disc list-inside space-y-2 text-gray-600">
-              <li>
-                <code>transaction.completed</code> - Transaction successfully
-                completed
-              </li>
-              <li>
-                <code>transaction.failed</code> - Transaction failed
-              </li>
-              <li>
-                <code>balance.updated</code> - Customer balance changed
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">
-              Webhook Payload Example
-            </h3>
+            <h4 className="font-semibold mt-4 mb-2">Response</h4>
             <CodeBlock
-              id="webhook-payload"
+              id="send-response"
               language="json"
               code={`{
-  "event": "transaction.completed",
-  "data": {
-    "transactionId": "txn_456def",
-    "amount": 10.00,
-    "recipientPhone": "+1234567890",
+  "success": true,
+  "message": "Top-up sent successfully",
+  "transaction": {
+    "id": "...",
+    "orderId": "ORD-...",
+    "amount": 10,
+    "currency": "USD",
     "status": "completed",
-    "completedAt": "2024-01-15T10:35:00Z"
-  },
-  "timestamp": "2024-01-15T10:35:01Z"
+    "recipientPhone": "+50934748112",
+    "transferId": 123456789,
+    "isTestMode": false
+  }
 }`}
             />
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Retry Logic</h3>
-            <p className="text-gray-600 mb-4">
-              Webhooks are retried using exponential backoff:
+            <p className="text-sm text-gray-500 mt-3">
+              A status of <code>processing</code> means the provider
+              accepted the send but has not confirmed it yet — poll the
+              status endpoint below. A definitively failed send returns
+              HTTP 500 with the failure reason; the transaction is
+              recorded as <code>failed</code> and can be read back with
+              the status endpoint (or by replaying the same
+              Idempotency-Key).
             </p>
-            <ul className="list-disc list-inside space-y-1 text-gray-600">
-              <li>Attempt 1: Immediate</li>
-              <li>Attempt 2: After 1 minute</li>
-              <li>Attempt 3: After 5 minutes</li>
-              <li>Attempt 4: After 15 minutes</li>
-              <li>Attempt 5: After 1 hour</li>
-              <li>Attempt 6: After 6 hours</li>
-            </ul>
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-3">
-              Signature Verification (Coming Soon)
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Verify webhook authenticity by checking the signature header:
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-green-100 text-green-800 rounded font-mono text-sm font-semibold">
+                GET
+              </span>
+              <code className="text-lg">
+                /api/v1/partner/topups/:orderId
+              </code>
+            </div>
+            <p className="text-gray-600 mb-3">
+              Read one top-up&apos;s status. Only your
+              organization&apos;s transactions are visible — any other
+              order id returns 404. If the transaction is still
+              processing, its live provider status is checked before
+              answering. Required scope: <code>transactions:read</code>.
             </p>
             <CodeBlock
-              id="webhook-verify"
-              language="javascript"
-              code={`const crypto = require('crypto');
-
-function verifyWebhook(payload, signature, secret) {
-  const hmac = crypto.createHmac('sha256', secret);
-  const computed = hmac.update(JSON.stringify(payload)).digest('hex');
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(computed)
-  );
+              id="status-curl"
+              language="bash"
+              code={`curl /api/v1/partner/topups/ORD-... \\
+  -H "X-API-Key: sk_live_your_api_key_here"`}
+            />
+            <h4 className="font-semibold mt-4 mb-2">Response</h4>
+            <CodeBlock
+              id="status-response"
+              language="json"
+              code={`{
+  "orderId": "ORD-...",
+  "status": "completed",
+  "transferId": 123456789,
+  "amount": 10,
+  "currency": "USD",
+  "recipientPhone": "+50934748112",
+  "failureReason": null,
+  "isTestMode": false
 }`}
             />
           </div>
         </div>
       </section>
 
-      {/* Error Codes */}
+      {/* Errors */}
       <section id="errors" className="mb-16">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">
-          Error Handling
-        </h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-6">Errors</h2>
         <div className="bg-white rounded-lg shadow-sm border p-8 space-y-6">
-          <div>
-            <h3 className="text-xl font-semibold mb-3">
-              Error Response Format
-            </h3>
-            <CodeBlock
-              id="error-format"
-              language="json"
-              code={`{
-  "success": false,
-  "error": {
-    "code": "INSUFFICIENT_BALANCE",
-    "message": "Insufficient balance to complete transaction",
-    "details": {
-      "required": 10.00,
-      "available": 5.50
-    }
-  }
+          <p className="text-gray-600">
+            Errors are returned as RFC 7807 problem details:
+          </p>
+          <CodeBlock
+            id="error-format"
+            language="json"
+            code={`{
+  "type": "bad-request",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Idempotency-Key header is required for partner top-up requests"
 }`}
-            />
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Common Error Codes</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Code
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      HTTP Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Description
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      UNAUTHORIZED
-                    </td>
-                    <td className="px-6 py-4 text-sm">401</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Invalid or missing API key
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">FORBIDDEN</td>
-                    <td className="px-6 py-4 text-sm">403</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Insufficient permissions
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">NOT_FOUND</td>
-                    <td className="px-6 py-4 text-sm">404</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Resource not found
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      RATE_LIMIT_EXCEEDED
-                    </td>
-                    <td className="px-6 py-4 text-sm">429</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Rate limit exceeded
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      INSUFFICIENT_BALANCE
-                    </td>
-                    <td className="px-6 py-4 text-sm">400</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Insufficient balance
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 font-mono text-sm">
-                      VALIDATION_ERROR
-                    </td>
-                    <td className="px-6 py-4 text-sm">400</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      Invalid request data
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          />
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    HTTP Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Meaning
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td className="px-6 py-4 text-sm">400</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Invalid request (missing Idempotency-Key, unknown
+                    SKU, sendValue out of range, …)
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 text-sm">401</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Missing, invalid, or expired API key
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 text-sm">403</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    API key lacks the required scope
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 text-sm">404</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Transaction not found in your organization
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 text-sm">429</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    Rate limit exceeded
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 text-sm">500</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    The send failed at the provider, or an unexpected
+                    server error
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>

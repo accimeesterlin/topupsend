@@ -1,3 +1,11 @@
+/**
+ * @jest-environment node
+ *
+ * (Node environment: this suite imports `next/server`, whose web
+ * spec-extension modules need the `Request` global — absent under
+ * jsdom, where the suite fails to load with "Request is not
+ * defined". Same annotation pattern as auth-hardening.test.ts.)
+ */
 import { NextResponse } from 'next/server';
 import {
   ApiException,
