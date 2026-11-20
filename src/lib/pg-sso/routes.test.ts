@@ -74,12 +74,12 @@ const resolveMock = resolvePgUser as unknown as jest.Mock;
 const sessionMock = createPgUserSessionToken as unknown as jest.Mock;
 
 const ORIGIN = 'http://localhost:3000';
-const ENV_KEYS = ['PG_SSO_SANDBOX_CLIENT_ID', 'PG_SSO_SANDBOX_CLIENT_SECRET'] as const;
+const ENV_KEYS = ['PG_SSO_CLIENT_ID', 'PG_SSO_CLIENT_SECRET'] as const;
 let savedEnv: Record<string, string | undefined>;
 
 function configureEnv() {
-  process.env.PG_SSO_SANDBOX_CLIENT_ID = 'topupsend-sandbox';
-  process.env.PG_SSO_SANDBOX_CLIENT_SECRET = 'sandbox-secret';
+  process.env.PG_SSO_CLIENT_ID = 'topupsend-sandbox';
+  process.env.PG_SSO_CLIENT_SECRET = 'sandbox-secret';
 }
 
 function seedStateCookie(overrides: { returnTo?: string } = {}) {
