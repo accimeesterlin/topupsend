@@ -105,9 +105,12 @@ describe('JWT Token Management', () => {
     });
 
     it('should create different tokens for same payload', async () => {
-      // Due to iat (issued at) timestamp, tokens should be different
+      // Due to iat (issued at) timestamp, tokens should be different.
+      // iat has one-second resolution, so the delay must cross a
+      // second boundary — the previous 10ms delay left both tokens
+      // in the same second and produced identical JWTs.
       const token1 = await createToken(mockPayload);
-      await new Promise((resolve) => setTimeout(resolve, 10)); // Small delay
+      await new Promise((resolve) => setTimeout(resolve, 1100));
       const token2 = await createToken(mockPayload);
 
       expect(token1).not.toBe(token2);
