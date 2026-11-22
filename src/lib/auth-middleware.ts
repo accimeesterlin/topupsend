@@ -23,6 +23,9 @@ export interface ExtendedSessionPayload extends SessionPayload {
     scopes: ApiKeyScope[];
     ownerId: string;
     ownerType: "staff" | "customer";
+    // Set only for developer-app keys (see ApiKey.appId); legacy
+    // staff/customer keys leave it undefined.
+    appId?: string;
   };
 }
 

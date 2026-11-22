@@ -148,8 +148,15 @@ export async function PUT(
       Permission.MANAGE_API_KEYS,
     );
     const isOwner = apiKey.ownerId === session.userId;
+    // Developer-app keys belong to the organization, not just their
+    // creator: any org admin of the key's OWN org may manage them
+    // (the org check above has already pinned apiKey.orgId to the
+    // session org, so this can never reach another org's keys).
+    const isAppKeyOrgAdmin =
+      Boolean(apiKey.appId) &&
+      hasPermission(session.roles, Permission.MANAGE_API_KEYS);
 
-    if (!canManageAll && !isOwner) {
+    if (!canManageAll && !isOwner && !isAppKeyOrgAdmin) {
       throw ApiErrors.Forbidden("Access denied");
     }
 
@@ -232,8 +239,14 @@ export async function DELETE(
       Permission.REVOKE_API_KEYS,
     );
     const isOwner = apiKey.ownerId === session.userId;
+    // App keys: an org admin of the key's own org may revoke them
+    // even when a different admin created them (org check above).
+    const isAppKeyOrgAdmin =
+      Boolean(apiKey.appId) &&
+      (hasPermission(session.roles, Permission.MANAGE_API_KEYS) ||
+        hasPermission(session.roles, Permission.REVOKE_API_KEYS));
 
-    if (!canRevokeAll && !isOwner) {
+    if (!canRevokeAll && !isOwner && !isAppKeyOrgAdmin) {
       throw ApiErrors.Forbidden("Access denied");
     }
   }
