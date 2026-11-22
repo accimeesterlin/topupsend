@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -202,12 +203,12 @@ export default function SecuritySettingsPage() {
           <CardContent>
             <p className="text-sm text-muted-foreground">
               API keys are created per app in the{" "}
-              <a
+              <Link
                 href="/dashboard/developers"
                 className="text-primary hover:underline"
               >
                 Developers
-              </a>{" "}
+              </Link>{" "}
               section.
             </p>
           </CardContent>
