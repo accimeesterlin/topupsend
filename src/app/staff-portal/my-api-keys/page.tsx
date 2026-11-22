@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
 
 interface ApiKey {
-  _id: string;
+  id: string;
   keyPrefix: string;
   name: string;
   scopes: string[];
   lastUsedAt?: string;
   createdAt: string;
-  isActive: boolean;
+  isActive?: boolean;
 }
 
 export default function MyApiKeysPage() {
@@ -54,7 +54,8 @@ export default function MyApiKeysPage() {
       }
 
       const data = await res.json();
-      setApiKeys(data.data || []);
+      // The API returns the list flat at the top level: { keys: [...] }
+      setApiKeys(data.keys || []);
     } catch (err: any) {
       setError(err.message || "Failed to load API keys");
     } finally {
@@ -76,10 +77,20 @@ export default function MyApiKeysPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error?.message || "Failed to create API key");
+        throw new Error(
+          data.error?.message || data.detail || "Failed to create API key",
+        );
       }
 
-      setCreatedKey(data.data.fullKey);
+      // The API returns the created key flat at the top level:
+      // { message, key, apiKey: {...} } — the one-time secret is `key`.
+      const fullKey = data.key;
+
+      if (!fullKey) {
+        throw new Error("API key was created but not returned in response");
+      }
+
+      setCreatedKey(fullKey);
       setNewKeyData({ name: "", scopes: [] });
       await loadApiKeys();
     } catch (err: any) {
@@ -178,7 +189,7 @@ export default function MyApiKeysPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {apiKeys.map((key) => (
-                  <tr key={key._id}>
+                  <tr key={key.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {key.name}
                     </td>
@@ -205,18 +216,18 @@ export default function MyApiKeysPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          key.isActive
+                          key.isActive !== false
                             ? "bg-green-100 text-green-800"
                             : "bg-red-100 text-red-800"
                         }`}
                       >
-                        {key.isActive ? "Active" : "Revoked"}
+                        {key.isActive !== false ? "Active" : "Revoked"}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {key.isActive && (
+                      {key.isActive !== false && (
                         <button
-                          onClick={() => handleRevoke(key._id)}
+                          onClick={() => handleRevoke(key.id)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Revoke
