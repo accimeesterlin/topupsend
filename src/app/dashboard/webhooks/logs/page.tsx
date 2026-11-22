@@ -15,6 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  toast,
 } from "@topupsend/ui";
 import {
   RefreshCw,
@@ -49,6 +58,7 @@ export default function WebhookLogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
+  const [logToReplay, setLogToReplay] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterSource, setFilterSource] = useState<string>("all");
@@ -103,8 +113,6 @@ export default function WebhookLogsPage() {
   };
 
   const handleReplay = async (logId: string) => {
-    if (!confirm("Are you sure you want to replay this webhook?")) return;
-
     try {
       const res = await fetch(`/api/v1/webhooks/logs/${logId}/replay`, {
         method: "POST",
@@ -115,7 +123,11 @@ export default function WebhookLogsPage() {
       }
 
       await loadLogs();
-      alert("Webhook replayed successfully");
+      toast({
+        title: "Success",
+        description: "Webhook replayed successfully",
+        variant: "success",
+      });
     } catch (err: any) {
       setError(err.message || "Failed to replay webhook");
       setTimeout(() => setError(""), 5000);
@@ -308,7 +320,7 @@ export default function WebhookLogsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleReplay(log._id)}
+                            onClick={() => setLogToReplay(log._id)}
                           >
                             Replay
                           </Button>
@@ -460,6 +472,36 @@ export default function WebhookLogsPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Replay Webhook Confirmation */}
+        <AlertDialog
+          open={!!logToReplay}
+          onOpenChange={(open) => !open && setLogToReplay(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replay Webhook?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to replay this webhook?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (logToReplay) {
+                    const id = logToReplay;
+                    setLogToReplay(null);
+                    handleReplay(id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Replay Webhook
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

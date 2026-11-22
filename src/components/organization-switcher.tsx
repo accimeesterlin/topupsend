@@ -78,11 +78,19 @@ export function OrganizationSwitcher() {
       } else {
         const error = await response.json();
         console.error('Failed to switch organization:', error);
-        alert('Failed to switch organization. Please try again.');
+        toast({
+          title: 'Error',
+          description: 'Failed to switch organization. Please try again.',
+          variant: 'error',
+        });
       }
     } catch (error) {
       console.error('Error switching organization:', error);
-      alert('An error occurred. Please try again.');
+      toast({
+        title: 'Error',
+        description: 'An error occurred. Please try again.',
+        variant: 'error',
+      });
     } finally {
       setSwitching(false);
     }
