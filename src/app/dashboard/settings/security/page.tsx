@@ -201,12 +201,12 @@ export default function SecuritySettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This feature is available in the{" "}
+              API keys are created per app in the{" "}
               <a
-                href="/dashboard/settings/api-keys"
+                href="/dashboard/developers"
                 className="text-primary hover:underline"
               >
-                API Keys
+                Developers
               </a>{" "}
               section.
             </p>

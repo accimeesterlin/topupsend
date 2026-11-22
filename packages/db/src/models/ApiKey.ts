@@ -20,6 +20,10 @@ export interface IApiKey extends Document {
   orgId: string;
   ownerId: string; // UserOrganization ID or Customer ID
   ownerType: ApiKeyOwnerType;
+  // Developer-app linkage (self-serve dashboard keys only). Legacy
+  // staff-portal / customer keys have appId unset and behave as before.
+  appId?: string;
+  createdBy?: string; // Staff userId that created the key, when recorded
   name: string;
   scopes: ApiKeyScope[];
 
@@ -78,6 +82,14 @@ const ApiKeySchema = new Schema<IApiKey>(
       required: true,
       enum: ["staff", "customer"],
       index: true,
+    },
+    appId: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    createdBy: {
+      type: String,
     },
     name: {
       type: String,
@@ -158,6 +170,7 @@ const ApiKeySchema = new Schema<IApiKey>(
 // Indexes
 ApiKeySchema.index({ orgId: 1, isActive: 1 });
 ApiKeySchema.index({ ownerId: 1, ownerType: 1, isActive: 1 });
+ApiKeySchema.index({ appId: 1, isActive: 1 });
 ApiKeySchema.index({ expiresAt: 1 }, { sparse: true });
 
 // Validate scope method
