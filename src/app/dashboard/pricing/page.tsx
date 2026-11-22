@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DollarSign, Plus, Edit, Trash2, Save, ChevronUp, ChevronDown, Info } from 'lucide-react';
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@topupsend/ui';
+import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +40,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
+  const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showFeesTip, setShowFeesTip] = useState(false);
 
@@ -230,10 +231,6 @@ export default function PricingPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this pricing rule?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/pricing/${id}`, {
         method: 'DELETE',
@@ -443,7 +440,7 @@ export default function PricingPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(rule._id)}
+                        onClick={() => setRuleToDelete(rule._id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -717,6 +714,36 @@ export default function PricingPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Pricing Rule Confirmation */}
+        <AlertDialog
+          open={!!ruleToDelete}
+          onOpenChange={(open) => !open && setRuleToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Pricing Rule?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this pricing rule?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (ruleToDelete) {
+                    const id = ruleToDelete;
+                    setRuleToDelete(null);
+                    handleDelete(id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Rule
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );
