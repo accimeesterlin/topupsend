@@ -7,7 +7,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from '@topupsend/ui';
+import { toast, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import type { DetailedScheduledTopupResponse } from '@/types/scheduled-topups';
 import { format } from 'date-fns';
 
@@ -21,6 +21,7 @@ export default function ScheduledTopupDetailsPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
   const [schedule, setSchedule] = useState<DetailedScheduledTopupResponse | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -110,10 +111,6 @@ export default function ScheduledTopupDetailsPage({ params }: PageProps) {
   };
 
   const handleCancel = async () => {
-    if (!confirm('Are you sure you want to cancel this schedule?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/scheduled-topups/${id}`, {
         method: 'DELETE',
@@ -215,7 +212,7 @@ export default function ScheduledTopupDetailsPage({ params }: PageProps) {
             )}
             {(schedule.status === 'active' || schedule.status === 'paused') && (
               <button
-                onClick={handleCancel}
+                onClick={() => setShowCancelConfirm(true)}
                 className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
               >
                 Cancel
@@ -368,6 +365,33 @@ export default function ScheduledTopupDetailsPage({ params }: PageProps) {
           <p className="text-gray-700">{schedule.notes}</p>
         </div>
       )}
+
+      {/* Cancel Schedule Confirmation */}
+      <AlertDialog
+        open={showCancelConfirm}
+        onOpenChange={(open) => !open && setShowCancelConfirm(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Schedule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this schedule?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Schedule</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowCancelConfirm(false);
+                handleCancel();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Cancel Schedule
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
