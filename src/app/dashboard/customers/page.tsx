@@ -43,6 +43,14 @@ import {
   DropdownMenuTrigger,
   Badge,
   toast,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { WhatsAppButton } from '@/components/whatsapp-button';
@@ -91,6 +99,7 @@ export default function CustomersPage() {
   const [groups, setGroups] = useState<CustomerGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -704,10 +713,6 @@ export default function CustomersPage() {
   };
 
   const deleteGroup = async (groupId: string) => {
-    if (!confirm('Are you sure you want to delete this group? Customers will not be deleted.')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/customer-groups/${groupId}`, {
         method: 'DELETE',
@@ -1549,7 +1554,7 @@ export default function CustomersPage() {
                           <p className="text-xs text-muted-foreground">{group.customerCount} customers</p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => deleteGroup(group._id)}>
+                      <Button variant="ghost" size="sm" onClick={() => setGroupToDelete(group._id)}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1915,6 +1920,37 @@ export default function CustomersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Group Confirmation */}
+        <AlertDialog
+          open={!!groupToDelete}
+          onOpenChange={(open) => !open && setGroupToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Group?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this group? Customers will
+                not be deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (groupToDelete) {
+                    const id = groupToDelete;
+                    setGroupToDelete(null);
+                    deleteGroup(id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Group
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

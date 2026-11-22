@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Tag, Save, Plus, Edit, Trash2, Search, Filter, Copy, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@topupsend/ui';
+import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, toast, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +30,7 @@ export default function DiscountsPage() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null);
+  const [discountToDelete, setDiscountToDelete] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Search and filter state
@@ -229,10 +230,6 @@ export default function DiscountsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this discount?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/discounts/${id}`, {
         method: 'DELETE',
@@ -498,7 +495,7 @@ export default function DiscountsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(discount._id)}
+                        onClick={() => setDiscountToDelete(discount._id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -823,6 +820,36 @@ export default function DiscountsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Discount Confirmation */}
+        <AlertDialog
+          open={!!discountToDelete}
+          onOpenChange={(open) => !open && setDiscountToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Discount?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this discount?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (discountToDelete) {
+                    const id = discountToDelete;
+                    setDiscountToDelete(null);
+                    handleDelete(id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Discount
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

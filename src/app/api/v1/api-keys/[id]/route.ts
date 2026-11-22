@@ -7,7 +7,7 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ApiKey } from "@topupsend/db";
+import { ApiKey, dbConnection } from "@topupsend/db";
 import { ApiErrors } from "@/lib/api-error";
 import {
   createSuccessResponse,
@@ -26,6 +26,13 @@ export async function GET(
   const { id } = await params;
   const { searchParams } = new URL(request.url);
   const isCustomer = searchParams.get("customer") === "true";
+
+  // Connect BEFORE the first query: this handler looks the key up
+  // before either auth path runs, and nothing else on that path opens
+  // the connection. On a cold instance the findById below otherwise
+  // buffers and times out ("buffering timed out after 10000ms"),
+  // surfacing as a bare 500 — the staff/customer revoke failure.
+  await dbConnection.connect();
 
   const apiKey = await ApiKey.findById(id);
 
@@ -108,6 +115,9 @@ export async function PUT(
 
   const body = await request.json();
   const data = updateKeySchema.parse(body);
+
+  // Connect before the first query (see GET above).
+  await dbConnection.connect();
 
   const apiKey = await ApiKey.findById(id);
 
@@ -204,6 +214,9 @@ export async function DELETE(
   const { id } = await params;
   const { searchParams } = new URL(request.url);
   const isCustomer = searchParams.get("customer") === "true";
+
+  // Connect before the first query (see GET above).
+  await dbConnection.connect();
 
   const apiKey = await ApiKey.findById(id);
 

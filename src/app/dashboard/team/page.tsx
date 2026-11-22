@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { UserPlus, Mail, Shield, Eye, Trash2, Edit2, Users as UsersIcon, Crown, AlertCircle, Settings, BarChart3, Store, DollarSign, Tag, Globe, ShoppingCart, CreditCard, Plug, Wallet, Copy, Search } from 'lucide-react';
-import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast } from '@topupsend/ui';
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, toast, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 
 // Permission categories with descriptions
@@ -142,6 +142,7 @@ export default function TeamPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRoles, setInviteRoles] = useState<string[]>(['viewer']);
   const [isInviting, setIsInviting] = useState(false);
@@ -295,10 +296,6 @@ export default function TeamPage() {
   };
 
   const handleRemoveMember = async (member: TeamMember) => {
-    if (!confirm(`Are you sure you want to remove ${member.user.email} from the team?`)) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/organizations/members/${member.id}`, {
         method: 'DELETE',
@@ -525,7 +522,7 @@ export default function TeamPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemoveMember(member)}
+                        onClick={() => setMemberToRemove(member)}
                         className="text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -775,6 +772,37 @@ export default function TeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Remove Team Member Confirmation */}
+      <AlertDialog
+        open={!!memberToRemove}
+        onOpenChange={(open) => !open && setMemberToRemove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Team Member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove{' '}
+              {memberToRemove?.user.email} from the team?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (memberToRemove) {
+                  const member = memberToRemove;
+                  setMemberToRemove(null);
+                  handleRemoveMember(member);
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Remove Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

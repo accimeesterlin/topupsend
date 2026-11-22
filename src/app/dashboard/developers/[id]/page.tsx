@@ -68,6 +68,10 @@ export default function DeveloperAppDetailPage() {
   const [saving, setSaving] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [keyToRevoke, setKeyToRevoke] = useState<AppKey | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,28 +143,28 @@ export default function DeveloperAppDetailPage() {
     }
   };
 
-  const handleRevoke = async (keyId: string) => {
-    if (!confirm("Revoke this API key? Integrations using it will stop working."))
-      return;
+  const handleRevoke = async () => {
+    if (!keyToRevoke || revoking) return;
+    setRevoking(true);
     try {
-      const res = await fetch(`/api/v1/api-keys/${keyId}`, {
+      const res = await fetch(`/api/v1/api-keys/${keyToRevoke.id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to revoke key");
+      setKeyToRevoke(null);
       await load();
     } catch (err: any) {
       setError(err.message || "Failed to revoke key");
       setTimeout(() => setError(""), 5000);
+      setKeyToRevoke(null);
+    } finally {
+      setRevoking(false);
     }
   };
 
   const handleDeactivate = async () => {
-    if (
-      !confirm(
-        "Deactivate this app? All of its API keys will be revoked immediately.",
-      )
-    )
-      return;
+    if (deactivating) return;
+    setDeactivating(true);
     try {
       const res = await fetch(`/api/v1/apps/${appId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to deactivate app");
@@ -168,6 +172,8 @@ export default function DeveloperAppDetailPage() {
     } catch (err: any) {
       setError(err.message || "Failed to deactivate app");
       setTimeout(() => setError(""), 5000);
+      setShowDeactivateConfirm(false);
+      setDeactivating(false);
     }
   };
 
@@ -231,7 +237,10 @@ export default function DeveloperAppDetailPage() {
             </p>
           </div>
           {app.isActive && (
-            <Button variant="destructive" onClick={handleDeactivate}>
+            <Button
+              variant="destructive"
+              onClick={() => setShowDeactivateConfirm(true)}
+            >
               Deactivate App
             </Button>
           )}
@@ -321,7 +330,7 @@ export default function DeveloperAppDetailPage() {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleRevoke(key.id)}
+                              onClick={() => setKeyToRevoke(key)}
                             >
                               Revoke
                             </Button>
@@ -471,6 +480,79 @@ export default function DeveloperAppDetailPage() {
                 {copied ? "Copied" : "Copy"}
               </Button>
               <Button onClick={() => setCreatedSecret(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Revoke key confirmation */}
+        <Dialog
+          open={!!keyToRevoke}
+          onOpenChange={(open) => {
+            if (!open && !revoking) setKeyToRevoke(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Revoke API Key?</DialogTitle>
+              <DialogDescription>
+                Revoke this API key? Integrations using it will stop
+                working.
+                {keyToRevoke && (
+                  <span className="mt-2 block p-2 bg-muted rounded text-sm font-mono">
+                    {keyToRevoke.name} ({keyToRevoke.keyPrefix}...)
+                  </span>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setKeyToRevoke(null)}
+                disabled={revoking}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRevoke}
+                disabled={revoking}
+              >
+                {revoking ? "Revoking..." : "Revoke Key"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Deactivate app confirmation */}
+        <Dialog
+          open={showDeactivateConfirm}
+          onOpenChange={(open) => {
+            if (!open && !deactivating) setShowDeactivateConfirm(false);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Deactivate App?</DialogTitle>
+              <DialogDescription>
+                Deactivate this app? All of its API keys will be revoked
+                immediately.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowDeactivateConfirm(false)}
+                disabled={deactivating}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeactivate}
+                disabled={deactivating}
+              >
+                {deactivating ? "Deactivating..." : "Deactivate App"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
