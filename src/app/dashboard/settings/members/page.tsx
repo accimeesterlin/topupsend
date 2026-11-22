@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { UserRole } from '@topupsend/types';
 import { DollarSign, RotateCcw } from 'lucide-react';
-import { toast } from '@topupsend/ui';
+import { toast, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
 
 interface Member {
@@ -29,6 +29,7 @@ interface Member {
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberToReset, setMemberToReset] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -176,10 +177,6 @@ export default function MembersPage() {
   };
 
   const resetBalance = async (member: Member) => {
-    if (!confirm('Are you sure you want to reset this member\'s used balance to zero?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/organizations/members/${member.id}/balance`, {
         method: 'POST',
@@ -357,7 +354,7 @@ export default function MembersPage() {
                           </button>
                           {hasBalanceLimit && member.balanceLimit!.currentUsed > 0 && (
                             <button
-                              onClick={() => resetBalance(member)}
+                              onClick={() => setMemberToReset(member)}
                               className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-800 transition-colors"
                               title="Reset used balance to zero"
                             >
@@ -551,6 +548,37 @@ export default function MembersPage() {
           </div>
         </>
       )}
+
+      {/* Reset Balance Confirmation */}
+      <AlertDialog
+        open={!!memberToReset}
+        onOpenChange={(open) => !open && setMemberToReset(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Balance?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reset this member&apos;s used
+              balance to zero?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (memberToReset) {
+                  const member = memberToReset;
+                  setMemberToReset(null);
+                  resetBalance(member);
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Reset Balance
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </DashboardLayout>
   );
