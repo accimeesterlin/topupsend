@@ -12,14 +12,14 @@ import { NextRequest } from "next/server";
 import { dbConnection, Integration } from "@topupsend/db";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 import { ApiException, handleApiError } from "@/lib/api-error";
-import { requireApiKeyWithScope } from "@/lib/auth-middleware";
+import { requirePartnerApiKey } from "@/lib/auth-middleware";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnection.connect();
 
-    const { orgId } = await requireApiKeyWithScope(request, "topup:send");
+    const { orgId } = await requirePartnerApiKey(request, "topup:send");
 
     // Get the active DingConnect integration for the key's org
     const integration = await Integration.findOne({

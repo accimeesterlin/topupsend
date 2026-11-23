@@ -14,14 +14,14 @@
 import { NextRequest } from "next/server";
 import { dbConnection, Org, Organization } from "@topupsend/db";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
-import { requireApiKeyWithScope } from "@/lib/auth-middleware";
+import { requirePartnerApiKey } from "@/lib/auth-middleware";
 import { POST as publicPhoneLookupPOST } from "../../lookup/phone/route";
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnection.connect();
 
-    const { orgId } = await requireApiKeyWithScope(request, "topup:send");
+    const { orgId } = await requirePartnerApiKey(request, "topup:send");
 
     const body = (await request.json().catch(() => null)) as {
       phoneNumber?: unknown;

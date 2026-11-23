@@ -223,6 +223,39 @@ export async function requireApiKeyWithScope(
 }
 
 /**
+ * Require an API key for the PARTNER API (org-funded integrations).
+ *
+ * RBAC C2: a scope check alone is not enough here. Partner sends are
+ * funded by the key's ORGANIZATION (its DingConnect account), never
+ * by the key owner — so a key owned by a storefront "customer" must
+ * not reach this surface at all, whatever scopes it carries. Customer
+ * keys authenticate only the customer surfaces that explicitly opt
+ * into them (requireCustomerAuthOrApiKey, which checks the same
+ * ownerType in the other direction). Staff keys and developer-app
+ * keys (ownerType "staff") are the partner API's intended callers.
+ */
+export async function requirePartnerApiKey(
+  request: NextRequest,
+  requiredScopes: ApiKeyScope | ApiKeyScope[],
+): Promise<{
+  apiKey: IApiKey;
+  orgId: string;
+}> {
+  const { apiKey, orgId } = await requireApiKeyWithScope(
+    request,
+    requiredScopes,
+  );
+
+  if (apiKey.ownerType === "customer") {
+    throw ApiErrors.Forbidden(
+      "Customer API keys cannot be used on the partner API. Partner sends are funded by the organization and require a staff or developer-app key.",
+    );
+  }
+
+  return { apiKey, orgId };
+}
+
+/**
  * F-M1 revalidation for customer sessions: the customer must still
  * exist and the token's version must still match the record's
  * tokenVersion (password reset/change and logout bump it).

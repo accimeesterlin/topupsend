@@ -16,6 +16,14 @@
  * The customer portal page consumes the same shapes correctly; this
  * contract keeps the staff page and the routes from drifting apart
  * again (same pattern as the developer-apps contract in PR #29).
+ *
+ * RBAC H1 re-pin: this suite previously blessed an OPERATOR minting
+ * a topup:send key through this legacy endpoint. That WAS the hole —
+ * MANAGE_OWN_API_KEYS is held by OPERATOR and the read-only VIEWER,
+ * and a key must not outrank its creator. Self-service creators
+ * without MANAGE_API_KEYS are now capped at read scopes; the shape
+ * contract below therefore creates read-scoped keys as the operator,
+ * and the ceiling itself is pinned in its own describe block.
  */
 import { NextRequest } from "next/server";
 import { createHash } from "crypto";
@@ -43,6 +51,7 @@ const mockRequireAuth = jest.fn();
 jest.mock("@/lib/auth-middleware", () => ({
   requireAuth: (...args: any[]) => mockRequireAuth(...args),
   requireCustomerAuth: jest.fn(),
+  requireVerifiedCustomer: jest.fn(),
 }));
 
 jest.mock("@topupsend/db", () => {
@@ -95,6 +104,11 @@ const OPERATOR = {
   orgId: "org-1",
   roles: [UserRole.OPERATOR],
 };
+const VIEWER = {
+  userId: "viewer-1",
+  orgId: "org-1",
+  roles: [UserRole.VIEWER],
+};
 const ADMIN = { userId: "admin-1", orgId: "org-1", roles: [UserRole.ADMIN] };
 
 function post(url: string, body: unknown) {
@@ -116,7 +130,7 @@ beforeEach(() => {
 
 async function createKey(
   name = "PG integration",
-  scopes = ["topup:send", "transactions:read"],
+  scopes = ["transactions:read", "balance:read"],
 ) {
   const res = await POST(
     post("http://localhost/api/v1/api-keys", { name, scopes }),
@@ -146,7 +160,7 @@ describe("staff api keys — create response-shape contract", () => {
     // apiKey metadata fields the page/routes contract on.
     expect(body.apiKey).toMatchObject({
       name: "PG integration",
-      scopes: ["topup:send", "transactions:read"],
+      scopes: ["transactions:read", "balance:read"],
       keyPrefix: body.key.substring(0, 12),
     });
     for (const field of ["id", "rateLimit", "createdAt"]) {
@@ -230,5 +244,63 @@ describe("staff api keys — list response-shape contract", () => {
       "Operator key",
       "Other member key",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RBAC H1 — self-service scope ceiling
+// ---------------------------------------------------------------------------
+
+describe("staff api keys — RBAC H1 self-service scope ceiling", () => {
+  async function postExpectingForbidden(scopes: string[]) {
+    await expect(
+      POST(
+        post("http://localhost/api/v1/api-keys", {
+          name: "Ceiling probe",
+          scopes,
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    // A refused mint must not persist a key.
+    expect(mockKeys).toHaveLength(0);
+  }
+
+  it("OPERATOR cannot mint topup:send (the pre-fix pin, now reversed)", async () => {
+    await postExpectingForbidden(["topup:send"]);
+  });
+
+  it("OPERATOR cannot mint balance:write", async () => {
+    await postExpectingForbidden(["balance:write"]);
+  });
+
+  it("OPERATOR cannot smuggle a write scope in with read scopes", async () => {
+    await postExpectingForbidden(["transactions:read", "customer:update"]);
+  });
+
+  it("VIEWER cannot mint topup:send or balance:write", async () => {
+    mockRequireAuth.mockResolvedValue(VIEWER);
+    await postExpectingForbidden(["topup:send"]);
+    await postExpectingForbidden(["balance:write"]);
+  });
+
+  it("VIEWER keeps read-scoped own keys (MANAGE_OWN_API_KEYS retained)", async () => {
+    mockRequireAuth.mockResolvedValue(VIEWER);
+    const body = await createKey("Viewer read key", [
+      "balance:read",
+      "webhooks:read",
+    ]);
+    expect(body.apiKey.scopes).toEqual(["balance:read", "webhooks:read"]);
+    expect(mockKeys).toHaveLength(1);
+    expect(mockKeys[0].ownerId).toBe("viewer-1");
+  });
+
+  it("ADMIN (MANAGE_API_KEYS) can still mint topup:send and admin:*", async () => {
+    mockRequireAuth.mockResolvedValue(ADMIN);
+    const send = await createKey("Admin send key", ["topup:send"]);
+    expect(send.apiKey.scopes).toEqual(["topup:send"]);
+
+    const admin = await createKey("Admin wildcard key", ["admin:*"]);
+    expect(admin.apiKey.scopes).toEqual(["admin:*"]);
+    expect(mockKeys).toHaveLength(2);
   });
 });

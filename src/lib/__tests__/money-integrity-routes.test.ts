@@ -7,8 +7,10 @@
  *   whose amount differs, does NOT activate (F-C2).
  * - Subscription webhook with a forged body status does not activate
  *   (F-C3).
- * - Scheduled-topups job does not start unless the env flag is
- *   exactly 'true' (scheduling kill-switch).
+ * - Scheduled-topups executor does not run unless the env flag is
+ *   exactly 'true' (scheduling kill-switch — formerly an in-process
+ *   node-cron job, now the CRON_SECRET-protected Vercel Cron route;
+ *   the same three flag cases are pinned against the route).
  *
  * All FAIL on pristine sandbox, PASS on the fix branch.
  */
@@ -71,10 +73,6 @@ jest.mock("@/lib/services/webhook-logging.service", () => ({
   },
 }));
 
-jest.mock("node-cron", () => ({
-  __esModule: true,
-  default: { schedule: jest.fn() },
-}));
 jest.mock("@/lib/services/scheduled-topups.service", () => ({
   processScheduledTopups: jest.fn(),
 }));
@@ -123,11 +121,11 @@ import {
   Transaction,
   WebhookLog,
 } from "@topupsend/db";
-import cron from "node-cron";
 import { POST as paymentsProcessPOST } from "../../app/api/v1/payments/process/route";
 import { POST as subscriptionVerifyPOST } from "../../app/api/v1/subscriptions/verify/route";
 import { POST as subscriptionWebhookPOST } from "../../app/api/v1/webhooks/pgpay/subscription/route";
-import { initScheduledTopupsJob } from "../jobs/scheduled-topups.job";
+import { GET as scheduledTopupsCronGET } from "../../app/api/v1/cron/scheduled-topups/route";
+import { processScheduledTopups } from "@/lib/services/scheduled-topups.service";
 
 const mockOrgFindOne = Org.findOne as jest.Mock;
 const mockOrganizationFindOne = Organization.findOne as jest.Mock;
@@ -139,7 +137,7 @@ const mockPaymentProviderFindOne = PaymentProvider.findOne as jest.Mock;
 const mockSettingsFindOne = StorefrontSettings.findOne as jest.Mock;
 const mockPricingRuleFind = PricingRule.find as jest.Mock;
 const mockWebhookLogFindOne = WebhookLog.findOne as jest.Mock;
-const mockCronSchedule = cron.schedule as jest.Mock;
+const mockProcessScheduledTopups = processScheduledTopups as jest.Mock;
 
 function fakeRequest(body: unknown, headers: Record<string, string> = {}) {
   return {
@@ -410,38 +408,89 @@ describe("webhooks/pgpay/subscription — forged body status (F-C3)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scheduling kill-switch
+// Scheduling kill-switch (ported from the deleted in-process job to
+// the Vercel Cron route — same flag semantics, plus CRON_SECRET)
 // ---------------------------------------------------------------------------
-describe("scheduled-topups job kill-switch", () => {
-  const original = process.env.SCHEDULED_TOPUPS_ENABLED;
+describe("scheduled-topups cron kill-switch", () => {
+  const originalEnabled = process.env.SCHEDULED_TOPUPS_ENABLED;
+  const originalSecret = process.env.CRON_SECRET;
+
+  const cronRequest = (auth?: string) =>
+    ({
+      headers: {
+        get: (name: string) =>
+          name === "authorization" ? (auth ?? null) : null,
+      },
+    }) as unknown as NextRequest;
+
+  beforeEach(() => {
+    mockProcessScheduledTopups.mockReset();
+    mockProcessScheduledTopups.mockResolvedValue([]);
+    process.env.CRON_SECRET = "test-cron-secret";
+  });
 
   afterAll(() => {
-    if (original === undefined) {
+    if (originalEnabled === undefined) {
       delete process.env.SCHEDULED_TOPUPS_ENABLED;
     } else {
-      process.env.SCHEDULED_TOPUPS_ENABLED = original;
+      process.env.SCHEDULED_TOPUPS_ENABLED = originalEnabled;
+    }
+    if (originalSecret === undefined) {
+      delete process.env.CRON_SECRET;
+    } else {
+      process.env.CRON_SECRET = originalSecret;
     }
   });
 
-  it("does not start when the flag is unset", () => {
+  it("does not run when the flag is unset", async () => {
     delete process.env.SCHEDULED_TOPUPS_ENABLED;
-    initScheduledTopupsJob();
-    expect(mockCronSchedule).not.toHaveBeenCalled();
+    const res = (await scheduledTopupsCronGET(
+      cronRequest("Bearer test-cron-secret"),
+    )) as unknown as { __ok: boolean; status: number };
+    expect(res.__ok).toBe(false);
+    expect(res.status).toBe(503);
+    expect(mockProcessScheduledTopups).not.toHaveBeenCalled();
   });
 
-  it("does not start when the flag is 'false' or any non-'true' value", () => {
-    process.env.SCHEDULED_TOPUPS_ENABLED = "false";
-    initScheduledTopupsJob();
-    process.env.SCHEDULED_TOPUPS_ENABLED = "1";
-    initScheduledTopupsJob();
-    process.env.SCHEDULED_TOPUPS_ENABLED = "TRUE";
-    initScheduledTopupsJob();
-    expect(mockCronSchedule).not.toHaveBeenCalled();
+  it("does not run when the flag is 'false' or any non-'true' value", async () => {
+    for (const value of ["false", "1", "TRUE"]) {
+      process.env.SCHEDULED_TOPUPS_ENABLED = value;
+      const res = (await scheduledTopupsCronGET(
+        cronRequest("Bearer test-cron-secret"),
+      )) as unknown as { __ok: boolean; status: number };
+      expect(res.__ok).toBe(false);
+      expect(res.status).toBe(503);
+    }
+    expect(mockProcessScheduledTopups).not.toHaveBeenCalled();
   });
 
-  it("starts only when the flag is exactly 'true'", () => {
+  it("runs only when the flag is exactly 'true'", async () => {
     process.env.SCHEDULED_TOPUPS_ENABLED = "true";
-    initScheduledTopupsJob();
-    expect(mockCronSchedule).toHaveBeenCalledTimes(1);
+    const res = (await scheduledTopupsCronGET(
+      cronRequest("Bearer test-cron-secret"),
+    )) as unknown as { __ok: boolean };
+    expect(res.__ok).toBe(true);
+    expect(mockProcessScheduledTopups).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when CRON_SECRET is not configured", async () => {
+    delete process.env.CRON_SECRET;
+    process.env.SCHEDULED_TOPUPS_ENABLED = "true";
+    const res = (await scheduledTopupsCronGET(
+      cronRequest("Bearer test-cron-secret"),
+    )) as unknown as { __ok: boolean; status: number };
+    expect(res.__ok).toBe(false);
+    expect(res.status).toBe(500);
+    expect(mockProcessScheduledTopups).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong bearer token", async () => {
+    process.env.SCHEDULED_TOPUPS_ENABLED = "true";
+    const res = (await scheduledTopupsCronGET(
+      cronRequest("Bearer wrong-secret"),
+    )) as unknown as { __ok: boolean; status: number };
+    expect(res.__ok).toBe(false);
+    expect(res.status).toBe(401);
+    expect(mockProcessScheduledTopups).not.toHaveBeenCalled();
   });
 });

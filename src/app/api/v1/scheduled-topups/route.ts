@@ -7,12 +7,15 @@
 import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth-middleware';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { ApiErrors } from '@/lib/api-error';
+import { ApiErrors, ApiException, handleApiError } from '@/lib/api-error';
 import { dbConnection, ScheduledTopup, type IScheduledTopup } from '@topupsend/db';
 import {
   createScheduledTopup,
   getUpcomingExecutions,
+  isValidTimezone,
 } from '@/lib/services/scheduled-topups.service';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 import type {
   CreateScheduledTopupRequest,
   ListScheduledTopupsQuery,
@@ -28,11 +31,30 @@ import { logger } from '@/lib/logger';
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth(request);
+
+    // M2: creating a schedule commits the org wallet to a future
+    // spend — admin-tier permission, like API-key creation. Reads
+    // stay open to any authenticated org member.
+    if (!hasPermission(session.roles, Permission.MANAGE_SCHEDULED_TOPUPS)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to manage scheduled top-ups'
+      );
+    }
+
     const body: CreateScheduledTopupRequest = await request.json();
 
     // Validate required fields
     if (!body.phoneNumber || !body.productId || !body.scheduledDate || !body.timezone) {
       throw ApiErrors.BadRequest('Missing required fields');
+    }
+
+    // L3: validate phone shape and timezone at the route so bad
+    // input is a 400, not a 500 from deep in date handling.
+    if (!/^\+?[0-9\s\-()]{7,20}$/.test(body.phoneNumber.trim())) {
+      throw ApiErrors.BadRequest('Invalid phone number');
+    }
+    if (!isValidTimezone(body.timezone)) {
+      throw ApiErrors.BadRequest('Invalid timezone');
     }
 
     const schedule = await createScheduledTopup(
@@ -53,6 +75,9 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (error instanceof Response) {
       return error;
+    }
+    if (error instanceof ApiException) {
+      return handleApiError(error);
     }
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Failed to create scheduled top-up', { error: errorMessage });
@@ -133,6 +158,9 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     if (error instanceof Response) {
       return error;
+    }
+    if (error instanceof ApiException) {
+      return handleApiError(error);
     }
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Failed to list scheduled top-ups', { error: errorMessage });

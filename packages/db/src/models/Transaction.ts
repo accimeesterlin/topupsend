@@ -67,6 +67,10 @@ export interface ITransaction extends Document {
     pgpayOrderId?: string;
     // Partner API idempotency (POST /api/v1/partner/topups)
     idempotencyKey?: string;
+    // Scheduled top-ups: the schedule that produced this transaction
+    // and the per-occurrence idempotency key ("<scheduleId>:<ISO>").
+    scheduledTopupId?: string;
+    scheduledOccurrenceKey?: string;
     // Device & browser (parsed from user-agent)
     deviceType?: string;
     browserName?: string;
@@ -234,6 +238,10 @@ const TransactionSchema = new Schema<ITransaction>(
       // Mongoose persists it — nested metadata paths drop undeclared
       // keys under strict mode)
       idempotencyKey: String,
+      // Scheduled top-ups (declared for the same strict-mode reason):
+      // owning schedule id and the per-occurrence idempotency key.
+      scheduledTopupId: String,
+      scheduledOccurrenceKey: String,
       // Device & browser (parsed from user-agent)
       deviceType: String,
       browserName: String,
@@ -299,6 +307,20 @@ TransactionSchema.index({ createdBy: 1, createdAt: -1 });
 TransactionSchema.index({ orgId: 1, createdBy: 1, status: 1 });
 TransactionSchema.index({ orgId: 1, paymentType: 1 });
 TransactionSchema.index({ "metadata.productSkuCode": 1 });
+// Scheduled top-ups: at most ONE send transaction may exist per
+// (schedule, occurrence). This is the database-level duplicate-fire
+// guard for the scheduled executor — a second create for the same
+// occurrence fails instead of double-sending. Partial index so the
+// many transactions without an occurrence key don't collide.
+TransactionSchema.index(
+  { "metadata.scheduledOccurrenceKey": 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      "metadata.scheduledOccurrenceKey": { $type: "string" },
+    },
+  },
+);
 
 // Generate orderId before save
 TransactionSchema.pre("save", function (next) {

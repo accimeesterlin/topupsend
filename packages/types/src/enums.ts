@@ -64,6 +64,11 @@ export enum Permission {
   DEPOSIT_WALLET = "deposit_wallet",
   EDIT_WALLET_SETTINGS = "edit_wallet_settings",
 
+  // Scheduled Top-ups (creating one commits the org wallet to a
+  // future spend, so mutations are admin-tier like API-key creation;
+  // reads stay open to any authenticated org member)
+  MANAGE_SCHEDULED_TOPUPS = "manage_scheduled_topups",
+
   // Organization Settings
   VIEW_ORG_SETTINGS = "view_org_settings",
   EDIT_ORG_SETTINGS = "edit_org_settings",
