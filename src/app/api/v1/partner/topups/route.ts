@@ -36,7 +36,7 @@ import {
 } from "@topupsend/db";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
-import { requireApiKeyWithScope } from "@/lib/auth-middleware";
+import { requirePartnerApiKey } from "@/lib/auth-middleware";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 import {
   PricingResolutionError,
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnection.connect();
 
-    const { apiKey, orgId } = await requireApiKeyWithScope(
+    const { apiKey, orgId } = await requirePartnerApiKey(
       request,
       "topup:send",
     );

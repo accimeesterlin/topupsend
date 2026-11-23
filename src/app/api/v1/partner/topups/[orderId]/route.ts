@@ -14,7 +14,7 @@ import { NextRequest } from "next/server";
 import { dbConnection, Transaction } from "@topupsend/db";
 import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { createSuccessResponse } from "@/lib/api-response";
-import { requireApiKeyWithScope } from "@/lib/auth-middleware";
+import { requirePartnerApiKey } from "@/lib/auth-middleware";
 import { settleStuckTransfer } from "@/lib/services/fulfillment.service";
 import { partnerTopupStatusView } from "@/lib/partner-transaction";
 import { logger } from "@/lib/logger";
@@ -26,7 +26,7 @@ export async function GET(
   try {
     await dbConnection.connect();
 
-    const { orgId } = await requireApiKeyWithScope(
+    const { orgId } = await requirePartnerApiKey(
       request,
       "transactions:read",
     );
