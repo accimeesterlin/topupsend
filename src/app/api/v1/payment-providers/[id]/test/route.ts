@@ -3,9 +3,11 @@ import { requireAuth } from "@/lib/auth-middleware";
 import { dbConnection } from "@topupsend/db/connection";
 import { PaymentProvider } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
-import { handleApiError } from "@/lib/api-error";
+import { ApiErrors, handleApiError } from "@/lib/api-error";
 import { logger } from "@/lib/logger";
 import { createPGPayService } from "@/lib/services/pgpay.service";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 /**
  * POST /api/v1/payment-providers/[id]/test
@@ -18,6 +20,16 @@ export async function POST(
   try {
     const { id } = await params;
     const session = await requireAuth(request);
+
+    // A connection test mutates the provider (status flip, learned
+    // merchantId persisted into credentials), so it requires the
+    // same EDIT_PAYMENT_SETTINGS permission as create/replace.
+    if (!hasPermission(session.roles, Permission.EDIT_PAYMENT_SETTINGS)) {
+      throw ApiErrors.Forbidden(
+        "You do not have permission to manage payment providers",
+      );
+    }
+
     await dbConnection.connect();
 
     const provider = await PaymentProvider.findOne({

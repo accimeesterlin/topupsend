@@ -3,8 +3,11 @@ import { requireAuth } from '@/lib/auth-middleware';
 import { dbConnection } from '@topupsend/db/connection';
 import { PaymentProvider } from '@topupsend/db';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api-response';
-import { handleApiError } from '@/lib/api-error';
+import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
+import { sanitizePaymentProvider } from '@/lib/response-sanitize';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * GET /api/v1/payment-providers/[id]
@@ -28,8 +31,13 @@ export async function GET(
       return createErrorResponse('Payment provider not found', 404);
     }
 
-    // Return with credentials for editing (only for owner)
-    return createSuccessResponse({ provider });
+    // Return the same sanitized shape as the list endpoint. This
+    // handler used to return the raw document — including the
+    // Stripe secret key, PayPal client secret, PG Pay API key and
+    // webhook secret in `credentials` — to any authenticated org
+    // member. The "only for owner" restriction the old comment
+    // claimed was never enforced; credentials are write-only now.
+    return createSuccessResponse({ provider: sanitizePaymentProvider(provider) });
   } catch (error) {
     logger.error('Error fetching payment provider', { error });
     return handleApiError(error);
@@ -47,6 +55,15 @@ export async function PATCH(
   try {
     const { id } = await params;
     const session = await requireAuth(request);
+
+    // Replacing stored gateway credentials requires
+    // EDIT_PAYMENT_SETTINGS (defined but previously unchecked).
+    if (!hasPermission(session.roles, Permission.EDIT_PAYMENT_SETTINGS)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to manage payment providers',
+      );
+    }
+
     await dbConnection.connect();
 
     const provider = await PaymentProvider.findOne({
@@ -117,6 +134,13 @@ export async function DELETE(
   try {
     const { id } = await params;
     const session = await requireAuth(request);
+
+    if (!hasPermission(session.roles, Permission.EDIT_PAYMENT_SETTINGS)) {
+      throw ApiErrors.Forbidden(
+        'You do not have permission to manage payment providers',
+      );
+    }
+
     await dbConnection.connect();
 
     const provider = await PaymentProvider.findOneAndDelete({

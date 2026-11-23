@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 import type {
   DuplicateGroup,
   FindDuplicatesResponse,
@@ -28,9 +30,16 @@ const customerProjection = {
  */
 export async function POST() {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Step one of the merge workflow (an EDIT_CUSTOMERS flow): it
+    // enumerates customer contact details for review, so it carries
+    // the same gate as the merge itself.
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await dbConnection.connect();

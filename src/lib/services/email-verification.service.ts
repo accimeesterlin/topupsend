@@ -6,6 +6,7 @@
 import crypto from "crypto";
 import { Customer, type ICustomer } from "@topupsend/db";
 import { sendEmail } from "./email.service";
+import { escapeHtml } from "@/lib/escape-html";
 
 export interface VerificationTokenData {
   token: string;
@@ -190,7 +191,7 @@ export class EmailVerificationService {
           </div>
           
           <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-            <p style="font-size: 16px;">Hi ${name},</p>
+            <p style="font-size: 16px;">Hi ${escapeHtml(name)},</p>
             
             <p style="font-size: 16px;">
               Thank you for creating an account! Please verify your email address to get started.

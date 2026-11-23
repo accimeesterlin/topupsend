@@ -141,7 +141,17 @@ const ManualPaymentSchema = new Schema<IManualPayment>(
 // Indexes for common queries
 ManualPaymentSchema.index({ orgId: 1, createdAt: -1 });
 ManualPaymentSchema.index({ orgId: 1, customerId: 1 });
-ManualPaymentSchema.index({ orgId: 1, method: 1, reference: 1 });
+// Idempotency (F-M12): an external reference may be recorded at most
+// once per org + method, so the same MonCash/NatCash/bank reference
+// cannot be recorded twice and double-credited. Partial index so the
+// cash payments that legitimately have no reference don't collide.
+ManualPaymentSchema.index(
+  { orgId: 1, method: 1, reference: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { reference: { $type: "string" } },
+  },
+);
 
 export const ManualPayment: Model<IManualPayment> =
   mongoose.models.ManualPayment ||

@@ -302,14 +302,15 @@ MONGODB_DB_NAME=pg-prepaid
 JWT_SECRET=your-secret-key
 NODE_ENV=development
 
-# Will need for integrations:
-DINGCONNECT_SANDBOX_API_KEY=
-DINGCONNECT_SANDBOX_SECRET=
+# Will need for integrations (sandbox credentials use the bare names;
+# production credentials keep the PRODUCTION_ prefix):
+DINGCONNECT_API_KEY=
+DINGCONNECT_SECRET=
 DINGCONNECT_PRODUCTION_API_KEY=
 DINGCONNECT_PRODUCTION_SECRET=
 
-RELOADLY_SANDBOX_CLIENT_ID=
-RELOADLY_SANDBOX_CLIENT_SECRET=
+RELOADLY_CLIENT_ID=
+RELOADLY_CLIENT_SECRET=
 RELOADLY_PRODUCTION_CLIENT_ID=
 RELOADLY_PRODUCTION_CLIENT_SECRET=
 
@@ -320,6 +321,13 @@ ENCRYPTION_KEY=generate-a-strong-32-byte-key
 DINGCONNECT_WEBHOOK_SECRET=
 RELOADLY_WEBHOOK_SECRET=
 ```
+
+> Note: in the current implementation, DingConnect and Reloadly credentials are
+> not read from environment variables. They are stored per organization in the
+> integration record (Dashboard → Integrations), together with an
+> `environment` field (`sandbox` | `production`) that selects the provider
+> endpoint. The variable names above are kept as reference for the credential
+> pairs only.
 
 ## File Structure Created
 

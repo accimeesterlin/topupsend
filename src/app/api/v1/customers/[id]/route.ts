@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 import bcrypt from "bcryptjs";
 
 // GET single customer
@@ -10,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -60,7 +62,7 @@ export async function PUT(
 
     // Try STAFF auth first (dashboard users)
     try {
-      staffSession = await getSession();
+      staffSession = await getRevalidatedSession();
       if (staffSession) {
         console.log('[Customer Update] Staff auth successful:', {
           staffUserId: staffSession.userId,
@@ -71,14 +73,34 @@ export async function PUT(
       console.log('[Customer Update] Staff auth failed:', error);
     }
 
+    // The staff path of this route can rewrite any field, set the
+    // customer's password and toggle their 2FA — an org write that
+    // requires EDIT_CUSTOMERS. It was checked nowhere, so a VIEWER
+    // staff session could do all three. (Customer callers updating
+    // themselves take the separate path below and are unaffected.)
+    if (
+      staffSession &&
+      !hasPermission(staffSession.roles, Permission.EDIT_CUSTOMERS)
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     // If no staff session, try customer auth (customer portal users)
     if (!staffSession) {
       const customerSessionCookie = request.cookies.get('customer-session');
 
       if (customerSessionCookie) {
         try {
-          const { getCustomerSession } = await import("@/lib/customer-auth");
-          const customerSession = await getCustomerSession();
+          // Revalidated, not bare getCustomerSession(): a customer
+          // token revoked server-side (password reset/change,
+          // logout — both bump tokenVersion) must stop working here
+          // immediately, not live out its 7-day expiry with profile
+          // and password-change rights. A refusal falls through to
+          // the same 401 as any other missing auth below.
+          const { getRevalidatedCustomerSession } = await import(
+            "@/lib/customer-auth"
+          );
+          const customerSession = await getRevalidatedCustomerSession();
 
           if (customerSession) {
             isCustomer = true;
@@ -116,6 +138,7 @@ export async function PUT(
       lastName,
       phone,
       password,
+      currentPassword,
       twoFactorEnabled,
     } = body;
 
@@ -136,6 +159,36 @@ export async function PUT(
       if (customer.orgId?.toString() !== staffSession.orgId) {
         console.log('[Customer Update] Forbidden: Customer belongs to different org');
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    // F-M3: a customer changing their OWN password through this
+    // profile route must prove knowledge of the current password —
+    // the same requirement the dedicated /password route enforces.
+    // Without it, a hijacked customer session could set a new
+    // password with no verification and take the account over
+    // permanently. (Staff callers keep the org-scoped admin
+    // set-password behavior the dashboard uses.)
+    if (password && isCustomer) {
+      if (typeof currentPassword !== "string" || !currentPassword) {
+        return NextResponse.json(
+          { error: "Current password is required to set a new password" },
+          { status: 400 },
+        );
+      }
+
+      const customerWithHash = await Customer.findById(id).select(
+        "+passwordHash",
+      );
+      const currentPasswordOk = customerWithHash
+        ? await customerWithHash.comparePassword(currentPassword)
+        : false;
+
+      if (!currentPasswordOk) {
+        return NextResponse.json(
+          { error: "Current password is incorrect" },
+          { status: 401 },
+        );
       }
     }
 
@@ -241,9 +294,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;

@@ -8,6 +8,7 @@ import {
   Plug,
   Store,
   Users,
+  Code2,
 } from "lucide-react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@topupsend/ui";
@@ -70,6 +71,14 @@ const settingsSections = [
     href: "/dashboard/settings/security",
     color: "text-red-600",
     bgColor: "bg-red-100",
+  },
+  {
+    title: "Developers",
+    description: "Apps and API keys for integrating with TopUpSend",
+    icon: Code2,
+    href: "/dashboard/developers",
+    color: "text-orange-600",
+    bgColor: "bg-orange-100",
   },
 ];
 

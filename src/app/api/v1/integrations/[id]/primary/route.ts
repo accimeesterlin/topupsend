@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Integration } from '@topupsend/db';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 /**
  * PATCH /api/v1/integrations/[id]/primary
@@ -14,10 +16,14 @@ export async function PATCH(
   try {
     console.log('[SET PRIMARY] Request received');
 
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       console.log('[SET PRIMARY] Unauthorized - no session');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_INTEGRATIONS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { isPrimaryEmail } = await request.json();

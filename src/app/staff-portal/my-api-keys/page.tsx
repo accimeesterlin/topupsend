@@ -3,15 +3,24 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/LanguageContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  toast,
+} from "@topupsend/ui";
 
 interface ApiKey {
-  _id: string;
+  id: string;
   keyPrefix: string;
   name: string;
   scopes: string[];
   lastUsedAt?: string;
   createdAt: string;
-  isActive: boolean;
+  isActive?: boolean;
 }
 
 export default function MyApiKeysPage() {
@@ -24,6 +33,8 @@ export default function MyApiKeysPage() {
     scopes: [] as string[],
   });
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [keyToRevoke, setKeyToRevoke] = useState<ApiKey | null>(null);
+  const [revoking, setRevoking] = useState(false);
   const router = useRouter();
   const { } = useTranslation();
 
@@ -54,7 +65,8 @@ export default function MyApiKeysPage() {
       }
 
       const data = await res.json();
-      setApiKeys(data.data || []);
+      // The API returns the list flat at the top level: { keys: [...] }
+      setApiKeys(data.keys || []);
     } catch (err: any) {
       setError(err.message || "Failed to load API keys");
     } finally {
@@ -76,10 +88,20 @@ export default function MyApiKeysPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error?.message || "Failed to create API key");
+        throw new Error(
+          data.error?.message || data.detail || "Failed to create API key",
+        );
       }
 
-      setCreatedKey(data.data.fullKey);
+      // The API returns the created key flat at the top level:
+      // { message, key, apiKey: {...} } — the one-time secret is `key`.
+      const fullKey = data.key;
+
+      if (!fullKey) {
+        throw new Error("API key was created but not returned in response");
+      }
+
+      setCreatedKey(fullKey);
       setNewKeyData({ name: "", scopes: [] });
       await loadApiKeys();
     } catch (err: any) {
@@ -87,11 +109,12 @@ export default function MyApiKeysPage() {
     }
   };
 
-  const handleRevoke = async (keyId: string) => {
-    if (!confirm("Are you sure you want to revoke this API key?")) return;
+  const handleRevoke = async () => {
+    if (!keyToRevoke || revoking) return;
 
+    setRevoking(true);
     try {
-      const res = await fetch(`/api/v1/api-keys/${keyId}`, {
+      const res = await fetch(`/api/v1/api-keys/${keyToRevoke.id}`, {
         method: "DELETE",
       });
 
@@ -99,9 +122,20 @@ export default function MyApiKeysPage() {
         throw new Error("Failed to revoke API key");
       }
 
+      // The list only returns active keys, so the revoked key drops
+      // out of the table on reload.
       await loadApiKeys();
+      setKeyToRevoke(null);
+      toast({
+        title: "Success",
+        description: "API key revoked successfully",
+        variant: "success",
+      });
     } catch (err: any) {
       setError(err.message || "Failed to revoke API key");
+      setKeyToRevoke(null);
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -178,7 +212,7 @@ export default function MyApiKeysPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {apiKeys.map((key) => (
-                  <tr key={key._id}>
+                  <tr key={key.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {key.name}
                     </td>
@@ -205,18 +239,18 @@ export default function MyApiKeysPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          key.isActive
+                          key.isActive !== false
                             ? "bg-green-100 text-green-800"
                             : "bg-red-100 text-red-800"
                         }`}
                       >
-                        {key.isActive ? "Active" : "Revoked"}
+                        {key.isActive !== false ? "Active" : "Revoked"}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {key.isActive && (
+                      {key.isActive !== false && (
                         <button
-                          onClick={() => handleRevoke(key._id)}
+                          onClick={() => setKeyToRevoke(key)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Revoke
@@ -230,6 +264,50 @@ export default function MyApiKeysPage() {
           </div>
         )}
       </div>
+
+      {/* Revoke Confirmation Dialog */}
+      <Dialog
+        open={!!keyToRevoke}
+        onOpenChange={(open: boolean) => {
+          if (!open && !revoking) setKeyToRevoke(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revoke API Key?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to revoke this API key? This action
+              cannot be undone and the key will immediately stop working.
+              {keyToRevoke && (
+                <span className="mt-2 block p-2 bg-gray-100 rounded text-sm font-mono text-gray-900">
+                  {keyToRevoke.name} ({keyToRevoke.keyPrefix}...)
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setKeyToRevoke(null)}
+              disabled={revoking}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRevoke}
+              disabled={revoking}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              {revoking && (
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+              )}
+              {revoking ? "Revoking..." : "Revoke Key"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create API Key Modal */}
       {showCreateModal && (
@@ -251,7 +329,10 @@ export default function MyApiKeysPage() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(createdKey);
-                    alert("API key copied to clipboard!");
+                    toast({
+                      title: "Copied",
+                      description: "API key copied to clipboard",
+                    });
                   }}
                   className="w-full mb-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >

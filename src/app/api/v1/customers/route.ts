@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Customer } from '@topupsend/db';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // GET all customers for the organization
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -18,7 +20,8 @@ export async function GET(request: NextRequest) {
     const favoritesOnly = searchParams.get('favorites') === 'true';
     const groupId = searchParams.get('groupId');
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    // Clamp page size to the platform max (F-M13)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 100);
 
     const query: any = { orgId: session.orgId };
 
@@ -66,9 +69,13 @@ export async function GET(request: NextRequest) {
 // POST - Create customer
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();

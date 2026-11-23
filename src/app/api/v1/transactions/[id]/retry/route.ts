@@ -10,7 +10,14 @@ import { hasPermission } from "@/lib/permissions";
 import { retryTransactionSchema } from "@/lib/validations/retry-transaction";
 import { createDingConnectService } from "@/lib/services/dingconnect.service";
 import { trackTransactionCompletion } from "@/lib/services/usage-tracking.service";
-import { processRefund } from "@/lib/services/refund.service";
+import {
+  processRefund,
+  reverseRefundCredit,
+} from "@/lib/services/refund.service";
+import {
+  isDefiniteProviderRejection,
+  pollTransferStatus,
+} from "@/lib/services/fulfillment.service";
 import { ZodError } from "zod";
 
 /**
@@ -181,8 +188,26 @@ export async function POST(
       apiKey: integration.credentials.apiKey as string,
     });
 
+    // If this order was previously refunded, reverse the refund credit
+    // BEFORE re-sending (F-C8): the customer must not end up with both
+    // the refund credit and the re-sent top-up. The reversal is
+    // idempotent and records any unrecoverable shortfall.
+    if (
+      transaction.timeline?.refundedAt ||
+      typeof (transaction.metadata as Record<string, unknown>)
+        .refundedAmount === "number"
+    ) {
+      const reversal = await reverseRefundCredit(transaction);
+      logger.info("Refund credit reversal for retry", {
+        orderId: transaction.orderId,
+        reversed: reversal.reversed,
+        reversedAmount: reversal.reversedAmount,
+        shortfall: reversal.shortfall,
+      });
+    }
+
     try {
-      const transferResult = await dingConnect.sendTransfer(
+      let transferResult = await dingConnect.sendTransfer(
         transferRequest as unknown as Parameters<typeof dingConnect.sendTransfer>[0],
       );
 
@@ -191,6 +216,50 @@ export async function POST(
         transferId: transferResult.TransferId,
         status: transferResult.Status,
       });
+
+      // Honest outcomes (F-H6): a "Processing" result is NOT a
+      // completion. Poll for the final state; if it never resolves,
+      // the order stays "processing" for the reconciliation sweep.
+      if (transferResult.Status === "Processing") {
+        const polled = await pollTransferStatus(
+          dingConnect,
+          Number(transferResult.TransferId),
+        ).catch(() => transferResult);
+
+        if (polled.Status !== "Completed" && polled.Status !== "Failed") {
+          transaction.providerTransactionId =
+            transferResult.TransferId?.toString();
+          transaction.metadata.retriedBy = session.userId;
+          transaction.metadata.retriedAt = new Date().toISOString();
+          transaction.metadata.dingconnectStatus = polled.Status;
+          (transaction.metadata as Record<string, unknown>).transferOutcome =
+            "unknown";
+          await transaction.save();
+
+          return createSuccessResponse({
+            retrySuccess: false,
+            message:
+              "Transfer is still processing at the provider. Its final status will be confirmed automatically.",
+            transaction: {
+              _id: transaction._id,
+              orderId: transaction.orderId,
+              status: transaction.status,
+              providerTransactionId: transaction.providerTransactionId,
+              timeline: transaction.timeline,
+              metadata: {
+                retryCount: transaction.metadata.retryCount,
+                retriedBy: transaction.metadata.retriedBy,
+              },
+            },
+            transferResult: {
+              transferId: transferResult.TransferId,
+              status: polled.Status,
+            },
+          });
+        }
+
+        transferResult = polled;
+      }
 
       transaction.providerTransactionId =
         transferResult.TransferId?.toString();
@@ -208,19 +277,10 @@ export async function POST(
 
       const now = new Date();
 
-      if (
-        transferResult.Status === "Completed" ||
-        transferResult.Status === "Processing"
-      ) {
+      if (transferResult.Status === "Completed") {
         transaction.status = "completed";
         transaction.timeline.completedAt = now;
         transaction.metadata.failureReason = undefined as unknown as string;
-
-        if (transferResult.Status === "Processing") {
-          transaction.metadata.dingconnectStatus = "Processing";
-          transaction.metadata.processingNote =
-            "Marked as completed while DingConnect processes the transfer";
-        }
 
         await transaction.save();
 
@@ -396,6 +456,38 @@ export async function POST(
       // DingConnect API call itself threw an error
       const errorMessage =
         dingError instanceof Error ? dingError.message : "Unknown error";
+
+      // Unknown outcome (timeout / network / 5xx): the provider may
+      // have accepted the transfer. Never refund — leave the order in
+      // "processing" for the reconciliation sweep (F-H7).
+      if (!isDefiniteProviderRejection(dingError)) {
+        logger.error(
+          "DingConnect retry outcome unknown - leaving in processing for reconciliation",
+          { orderId: transaction.orderId, error: errorMessage, retryCount },
+        );
+        (transaction.metadata as Record<string, unknown>).transferOutcome =
+          "unknown";
+        transaction.metadata.failureReason =
+          "DingConnect retry outcome unknown (possible timeout); awaiting status verification";
+        await transaction.save();
+
+        return createSuccessResponse({
+          retrySuccess: false,
+          message:
+            "The provider did not confirm the retry outcome. The order was NOT refunded; its final status will be verified automatically.",
+          transaction: {
+            _id: transaction._id,
+            orderId: transaction.orderId,
+            status: transaction.status,
+            metadata: {
+              retryCount: transaction.metadata.retryCount,
+            },
+          },
+          transferResult: {
+            errorMessage,
+          },
+        });
+      }
 
       logger.error("DingConnect API error during retry - processing refund", {
         orderId: transaction.orderId,

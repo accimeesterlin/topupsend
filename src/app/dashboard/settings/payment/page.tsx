@@ -22,6 +22,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@topupsend/ui";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { toast } from "@topupsend/ui";
@@ -118,6 +126,7 @@ const PAYMENT_GATEWAYS = [
 
 export default function PaymentSettingsPage() {
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
+  const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [configDialog, setConfigDialog] = useState<{
     open: boolean;
@@ -273,10 +282,6 @@ export default function PaymentSettingsPage() {
   };
 
   const handleDeleteProvider = async (providerId: string) => {
-    if (!confirm("Are you sure you want to delete this payment provider?")) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/payment-providers/${providerId}`, {
         method: "DELETE",
@@ -416,7 +421,7 @@ export default function PaymentSettingsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDeleteProvider(config._id)}
+                          onClick={() => setProviderToDelete(config._id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -767,6 +772,36 @@ export default function PaymentSettingsPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Payment Provider Confirmation */}
+        <AlertDialog
+          open={!!providerToDelete}
+          onOpenChange={(open) => !open && setProviderToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Payment Provider?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this payment provider?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (providerToDelete) {
+                    const id = providerToDelete;
+                    setProviderToDelete(null);
+                    handleDeleteProvider(id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Provider
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

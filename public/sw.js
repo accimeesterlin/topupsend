@@ -1,8 +1,30 @@
 // Service Worker for Mobile Top-Up PWA
 // Version 1.0.0
 
-const CACHE_NAME = 'mobile-topup-v1';
-const RUNTIME_CACHE = 'mobile-topup-runtime-v1';
+// Cache version: bump this on every deploy. Cache names are derived
+// from it, so a new deploy's worker activates with fresh caches and
+// the activate handler below retires the previous deploy's caches.
+const SW_VERSION = 'v2';
+
+const CACHE_NAME = `mobile-topup-${SW_VERSION}`;
+const RUNTIME_CACHE = `mobile-topup-runtime-${SW_VERSION}`;
+
+// Authenticated areas. Their HTML must never enter the runtime cache
+// (F-M9): a cached dashboard/portal page could otherwise be re-served
+// after sign-out, or to the next user of a shared browser. Navigations
+// to these prefixes are network-only and are never read back from
+// cache either.
+const AUTHENTICATED_PATH_PREFIXES = [
+  '/dashboard',
+  '/customer-portal',
+  '/staff-portal',
+];
+
+function isAuthenticatedPath(pathname) {
+  return AUTHENTICATED_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
 
 // Assets to cache on install
 const PRECACHE_ASSETS = [
@@ -63,6 +85,18 @@ self.addEventListener('fetch', (event) => {
             headers: { 'Content-Type': 'application/json' },
           }
         );
+      })
+    );
+    return;
+  }
+
+  // For navigation requests to authenticated areas: network-only,
+  // never cached and never served from cache (F-M9). On network
+  // failure, fall back straight to the offline page.
+  if (request.mode === 'navigate' && isAuthenticatedPath(url.pathname)) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match('/offline');
       })
     );
     return;

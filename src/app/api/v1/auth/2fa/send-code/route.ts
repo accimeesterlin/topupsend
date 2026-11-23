@@ -4,11 +4,26 @@ import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { dbConnection } from "@topupsend/db/connection";
 import { EmailService } from "@/lib/services/email.service";
 import { Organization } from "@topupsend/db";
+import { getJwtSecret, getSession } from "@/lib/auth";
+import { escapeHtml } from "@/lib/escape-html";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
+import {
+  STAFF_PENDING_AUTH_COOKIE,
+  TWO_FACTOR_CODE_TTL_MS,
+  generateTwoFactorCode,
+  hashTwoFactorCode,
+  pendingAuthStateMatches,
+  verifyPendingAuthCookie,
+} from "@/lib/two-factor";
 
 /**
  * POST /api/v1/auth/2fa/send-code
  * Generate and send a 2FA code to the user's email
- * Can be called during login (with email in body) or when logged in (uses session)
+ *
+ * F-H1: a code is issued only inside a post-password pending-auth
+ * state (created by the login route) or for an already signed-in
+ * user requesting a code for their own account. The code itself is
+ * generated with a CSPRNG and stored as a SHA-256 hash.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +35,27 @@ export async function POST(req: NextRequest) {
       return createErrorResponse("Email is required", 400);
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Rate limit code requests per account + IP (F-M6)
+    const rateLimit = await checkAuthRateLimit(
+      "twoFactorSend",
+      email,
+      getClientIp(req),
+    );
+    if (!rateLimit.allowed) {
+      const response = createErrorResponse(
+        "Too many verification code requests. Please try again later.",
+        429,
+      );
+      response.headers.set(
+        "Retry-After",
+        rateLimit.retryAfterSeconds.toString(),
+      );
+      return response;
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      "+twoFactorPendingId +twoFactorPendingExpires"
+    );
     if (!user) {
       // Don't reveal if user exists for security
       return createSuccessResponse({
@@ -34,17 +69,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Generate 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Bind the request to the password step: either the pending-auth
+    // cookie the login route issued for THIS user (with matching
+    // server-side state), or an existing full session for this user.
+    const pending = verifyPendingAuthCookie(
+      req.cookies.get(STAFF_PENDING_AUTH_COOKIE)?.value,
+      getJwtSecret(),
+    );
+    const boundByPending =
+      pending !== null &&
+      pending.sub === user._id.toString() &&
+      pendingAuthStateMatches(user, pending);
+    let boundBySession = false;
+    if (!boundByPending) {
+      const session = await getSession();
+      boundBySession = session?.userId === user._id.toString();
+    }
+    if (!boundByPending && !boundBySession) {
+      return createErrorResponse(
+        "Please sign in with your password before requesting a verification code",
+        401,
+      );
+    }
 
-    // Set code with 10 minute expiration
-    user.twoFactorCode = code;
-    user.twoFactorCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
+    // Generate a 6-digit code with a CSPRNG; store only its hash.
+    const code = generateTwoFactorCode();
+    user.twoFactorCode = hashTwoFactorCode(user._id.toString(), code);
+    user.twoFactorCodeExpires = new Date(
+      Date.now() + TWO_FACTOR_CODE_TTL_MS,
+    );
+    user.twoFactorAttempts = 0;
     await user.save();
 
     // Get organization for email branding
     const org = await Organization.findById(user.orgId);
     const orgName = org?.name || "Prepaid Minutes Platform";
+    const orgNameHtml = escapeHtml(orgName);
 
     // Send email with 2FA code
     const subject = `Your Two-Factor Authentication Code`;
@@ -68,7 +128,7 @@ export async function POST(req: NextRequest) {
     </p>
 
     <p style="font-size: 16px; margin-bottom: 20px;">
-      You requested a two-factor authentication code to access your ${orgName} account.
+      You requested a two-factor authentication code to access your ${orgNameHtml} account.
     </p>
 
     <div style="background: #f9fafb; border-left: 4px solid #667eea; padding: 20px; margin: 24px 0; border-radius: 4px; text-align: center;">
@@ -87,13 +147,13 @@ export async function POST(req: NextRequest) {
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
       Best regards,<br>
-      The ${orgName} Team
+      The ${orgNameHtml} Team
     </p>
   </div>
 
   <div style="text-align: center; margin-top: 24px; padding: 20px; color: #9ca3af; font-size: 12px;">
     <p style="margin: 0 0 8px 0;">This is an automated email. Please do not reply.</p>
-    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgName}. All rights reserved.</p>
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} ${orgNameHtml}. All rights reserved.</p>
   </div>
 </body>
 </html>

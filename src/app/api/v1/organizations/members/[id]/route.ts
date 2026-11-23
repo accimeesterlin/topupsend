@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/auth-middleware';
 import { dbConnection } from '@topupsend/db/connection';
-import { UserOrganization } from '@topupsend/db';
+import { User, UserOrganization } from '@topupsend/db';
 import { UserRole, Permission } from '@topupsend/types';
 import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { createSuccessResponse } from '@/lib/api-response';
@@ -100,6 +100,17 @@ export async function PATCH(
 
     await member.save();
 
+    // A role or permission change must take effect immediately
+    // (F-M1): bump the member's token version so sessions minted
+    // with the old roles fail requireAuth revalidation and the
+    // member signs in again with their current roles.
+    if (roles || customPermissions !== undefined) {
+      await User.updateOne(
+        { _id: member.userId },
+        { $inc: { tokenVersion: 1 } }
+      );
+    }
+
     logger.info('Team member updated', {
       memberId,
       orgId: member.orgId.toString(),
@@ -170,6 +181,13 @@ export async function DELETE(
     // Deactivate the member (soft delete)
     member.isActive = false;
     await member.save();
+
+    // Removal must take effect immediately (F-M1): revoke the
+    // member's outstanding sessions via their token version.
+    await User.updateOne(
+      { _id: member.userId },
+      { $inc: { tokenVersion: 1 } }
+    );
 
     logger.info('Team member removed', {
       memberId,

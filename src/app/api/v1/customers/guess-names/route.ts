@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import { Customer } from "@topupsend/db";
 import { guessNameFromEmail } from "@/lib/guess-name-from-email";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 export interface NameGuess {
   customerId: string;
@@ -23,9 +25,15 @@ export interface NameGuess {
  */
 export async function POST() {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Feeds the customer-cleanup (edit) workflow and enumerates
+    // customer emails — same EDIT_CUSTOMERS gate as the merge flow.
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await dbConnection.connect();

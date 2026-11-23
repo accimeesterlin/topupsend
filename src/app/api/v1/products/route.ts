@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
 import { Product } from '@topupsend/db';
+import { hasPermission } from '@/lib/permissions';
+import { Permission } from '@topupsend/types';
 
 // GET all products for the organization
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -17,6 +19,13 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const status = searchParams.get('status');
     const provider = searchParams.get('provider');
+    // Pagination (F-M13): this list used to return the org's entire
+    // catalog unbounded. Response stays a bare array of the page.
+    const page = Math.max(parseInt(searchParams.get('page') || '1') || 1, 1);
+    const limit = Math.min(
+      parseInt(searchParams.get('limit') || '100') || 100,
+      100
+    );
 
     const query: any = { orgId: session.orgId };
 
@@ -37,7 +46,10 @@ export async function GET(request: NextRequest) {
       query.provider = provider;
     }
 
-    const products = await Product.find(query).sort({ createdAt: -1 });
+    const products = await Product.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     return NextResponse.json(products);
   } catch (error) {
@@ -49,9 +61,13 @@ export async function GET(request: NextRequest) {
 // POST - Create product (simplified - just name required)
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_PRODUCTS)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();

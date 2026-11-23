@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from '@topupsend/ui';
+import { toast, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@topupsend/ui';
 import { ScheduleTopupForm } from '@/components/scheduled-topups/schedule-form';
 import type { ScheduledTopupsListResponse } from '@/types/scheduled-topups';
 import { format } from 'date-fns';
@@ -17,6 +17,7 @@ export default function ScheduledTopupsPage() {
   const [schedules, setSchedules] = useState<ScheduledTopupsListResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [scheduleToCancel, setScheduleToCancel] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
@@ -110,10 +111,6 @@ export default function ScheduledTopupsPage() {
   };
 
   const handleCancel = async (scheduleId: string) => {
-    if (!confirm('Are you sure you want to cancel this schedule?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/v1/scheduled-topups/${scheduleId}`, {
         method: 'DELETE',
@@ -289,7 +286,7 @@ export default function ScheduledTopupsPage() {
                     )}
                     {(schedule.status === 'active' || schedule.status === 'paused') && (
                       <button
-                        onClick={() => handleCancel(schedule.id)}
+                        onClick={() => setScheduleToCancel(schedule.id)}
                         className="text-red-600 hover:text-red-800"
                       >
                         Cancel
@@ -321,6 +318,36 @@ export default function ScheduledTopupsPage() {
           </button>
         </div>
       )}
+
+      {/* Cancel Schedule Confirmation */}
+      <AlertDialog
+        open={!!scheduleToCancel}
+        onOpenChange={(open) => !open && setScheduleToCancel(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Schedule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this schedule?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Schedule</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (scheduleToCancel) {
+                  const id = scheduleToCancel;
+                  setScheduleToCancel(null);
+                  handleCancel(id);
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Cancel Schedule
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

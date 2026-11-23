@@ -28,9 +28,18 @@ export interface ICustomer extends Document {
 
   // Two-Factor Authentication
   twoFactorEnabled: boolean;
+  /** SHA-256 hash of the current 2FA code (never the plaintext code). */
   twoFactorCode?: string;
   twoFactorCodeExpiry?: Date;
   twoFactorVerified?: boolean;
+  /** Failed verify attempts against the current code; reset on send/success. */
+  twoFactorAttempts?: number;
+  /** Server-side pending-auth state: set only after the password step passes. */
+  twoFactorPendingId?: string;
+  twoFactorPendingExpires?: Date;
+
+  /** Session revalidation version; embedded in session JWTs as `tv`. */
+  tokenVersion?: number;
 
   // Balance fields
   currentBalance: number;
@@ -180,6 +189,23 @@ const CustomerSchema = new Schema<ICustomer>(
       type: Boolean,
       default: false,
       select: false,
+    },
+    twoFactorAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+    twoFactorPendingId: {
+      type: String,
+      select: false,
+    },
+    twoFactorPendingExpires: {
+      type: Date,
+      select: false,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
     },
 
     // Balance fields

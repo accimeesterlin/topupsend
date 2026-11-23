@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       roles: user.roles,
       orgId: org._id.toString(),
+      tv: user.tokenVersion ?? 0,
     });
 
     // Create response with session cookie

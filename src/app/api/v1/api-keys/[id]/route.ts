@@ -7,7 +7,7 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ApiKey } from "@topupsend/db";
+import { ApiKey, dbConnection } from "@topupsend/db";
 import { ApiErrors } from "@/lib/api-error";
 import {
   createSuccessResponse,
@@ -27,6 +27,13 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const isCustomer = searchParams.get("customer") === "true";
 
+  // Connect BEFORE the first query: this handler looks the key up
+  // before either auth path runs, and nothing else on that path opens
+  // the connection. On a cold instance the findById below otherwise
+  // buffers and times out ("buffering timed out after 10000ms"),
+  // surfacing as a bare 500 — the staff/customer revoke failure.
+  await dbConnection.connect();
+
   const apiKey = await ApiKey.findById(id);
 
   if (!apiKey) {
@@ -37,6 +44,12 @@ export async function GET(
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
 
+    // F-H4: the key must belong to the customer's organization —
+    // cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     if (
       apiKey.ownerId !== customer.customerId ||
       apiKey.ownerType !== "customer"
@@ -45,6 +58,13 @@ export async function GET(
     }
   } else {
     const session = await requireAuth(request);
+
+    // F-H4: org check before ownership/permission — a global
+    // permission (e.g. ADMIN's VIEW_API_KEYS) must not reach keys
+    // belonging to another organization.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
 
     const canViewAll = hasPermission(session.roles, Permission.VIEW_API_KEYS);
     const isOwner = apiKey.ownerId === session.userId;
@@ -96,6 +116,9 @@ export async function PUT(
   const body = await request.json();
   const data = updateKeySchema.parse(body);
 
+  // Connect before the first query (see GET above).
+  await dbConnection.connect();
+
   const apiKey = await ApiKey.findById(id);
 
   if (!apiKey) {
@@ -105,6 +128,11 @@ export async function PUT(
   // Check ownership and permissions
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
+
+    // F-H4: cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
 
     if (
       apiKey.ownerId !== customer.customerId ||
@@ -120,13 +148,25 @@ export async function PUT(
   } else {
     const session = await requireAuth(request);
 
+    // F-H4: org check before ownership/permission.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     const canManageAll = hasPermission(
       session.roles,
       Permission.MANAGE_API_KEYS,
     );
     const isOwner = apiKey.ownerId === session.userId;
+    // Developer-app keys belong to the organization, not just their
+    // creator: any org admin of the key's OWN org may manage them
+    // (the org check above has already pinned apiKey.orgId to the
+    // session org, so this can never reach another org's keys).
+    const isAppKeyOrgAdmin =
+      Boolean(apiKey.appId) &&
+      hasPermission(session.roles, Permission.MANAGE_API_KEYS);
 
-    if (!canManageAll && !isOwner) {
+    if (!canManageAll && !isOwner && !isAppKeyOrgAdmin) {
       throw ApiErrors.Forbidden("Access denied");
     }
 
@@ -175,6 +215,9 @@ export async function DELETE(
   const { searchParams } = new URL(request.url);
   const isCustomer = searchParams.get("customer") === "true";
 
+  // Connect before the first query (see GET above).
+  await dbConnection.connect();
+
   const apiKey = await ApiKey.findById(id);
 
   if (!apiKey) {
@@ -185,6 +228,11 @@ export async function DELETE(
   if (isCustomer) {
     const customer = await requireCustomerAuth(request);
 
+    // F-H4: cross-org keys are indistinguishable from missing keys.
+    if (apiKey.orgId !== customer.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     if (
       apiKey.ownerId !== customer.customerId ||
       apiKey.ownerType !== "customer"
@@ -194,13 +242,24 @@ export async function DELETE(
   } else {
     const session = await requireAuth(request);
 
+    // F-H4: org check before ownership/permission.
+    if (apiKey.orgId !== session.orgId) {
+      throw ApiErrors.NotFound("API key not found");
+    }
+
     const canRevokeAll = hasPermission(
       session.roles,
       Permission.REVOKE_API_KEYS,
     );
     const isOwner = apiKey.ownerId === session.userId;
+    // App keys: an org admin of the key's own org may revoke them
+    // even when a different admin created them (org check above).
+    const isAppKeyOrgAdmin =
+      Boolean(apiKey.appId) &&
+      (hasPermission(session.roles, Permission.MANAGE_API_KEYS) ||
+        hasPermission(session.roles, Permission.REVOKE_API_KEYS));
 
-    if (!canRevokeAll && !isOwner) {
+    if (!canRevokeAll && !isOwner && !isAppKeyOrgAdmin) {
       throw ApiErrors.Forbidden("Access denied");
     }
   }

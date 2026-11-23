@@ -9,6 +9,7 @@ import { ApiErrors, handleApiError } from '@/lib/api-error';
 import { createSuccessResponse } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
 import { EmailService } from '@/lib/services/email.service';
+import { generateTemporaryPassword } from '@/lib/temp-password';
 
 const inviteUserSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -80,8 +81,9 @@ export async function POST(request: NextRequest) {
       // For now, we'll create a placeholder user account that they can claim later
       // In a production system, you'd typically send an email invitation
 
-      // Generate a temporary password (user will need to reset it)
-      const tempPassword = Math.random().toString(36).slice(-12);
+      // Generate a temporary password (user will need to reset it).
+      // CSPRNG — Math.random passwords are predictable (F-M5).
+      const tempPassword = generateTemporaryPassword();
       const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
       // Create the user account

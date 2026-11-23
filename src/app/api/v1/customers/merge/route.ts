@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { getSession } from "@/lib/auth";
+import { getRevalidatedSession } from "@/lib/auth";
 import { dbConnection } from "@topupsend/db/connection";
 import {
   Customer,
@@ -12,6 +12,8 @@ import {
 } from "@topupsend/db";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@topupsend/types";
 
 const mergeCustomersSchema = z.object({
   primaryCustomerId: z.string().min(1, "Primary customer ID is required"),
@@ -27,9 +29,13 @@ const mergeCustomersSchema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
+    const session = await getRevalidatedSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasPermission(session.roles, Permission.EDIT_CUSTOMERS)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();

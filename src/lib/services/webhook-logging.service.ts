@@ -18,6 +18,7 @@ export class WebhookLoggingService {
     event: string;
     source: WebhookSource;
     payload: any;
+    eventId?: string;
     headers?: Record<string, string>;
     signature?: string;
     ipAddress?: string;
@@ -28,6 +29,7 @@ export class WebhookLoggingService {
       orgId: params.orgId,
       event: params.event,
       source: params.source,
+      eventId: params.eventId,
       payload: params.payload,
       headers: params.headers,
       signature: params.signature,

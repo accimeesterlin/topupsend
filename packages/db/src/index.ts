@@ -58,6 +58,7 @@ export {
   type ApiKeyScope,
   type ApiKeyOwnerType,
 } from "./models/ApiKey";
+export { App, type IApp } from "./models/App";
 export {
   WebhookLog,
   type IWebhookLog,
