@@ -61,10 +61,16 @@ export interface IScheduledTopup extends Document {
   recurrence: RecurrenceConfig;
 
   // Status & Execution
-  status: 'active' | 'paused' | 'completed' | 'cancelled' | 'failed';
+  status: 'active' | 'paused' | 'processing' | 'completed' | 'cancelled' | 'failed';
   executionCount: number;
   lastExecutedAt?: Date;
   nextExecutionAt?: Date;
+
+  // Execution claim (set atomically when the executor picks the
+  // schedule up; cleared when the occurrence settles)
+  processingStartedAt?: Date;
+  currentOccurrenceAt?: Date;
+  pendingTransactionId?: Types.ObjectId;
 
   // Transaction History
   transactions: Types.ObjectId[];
@@ -199,7 +205,7 @@ const ScheduledTopupSchema = new Schema<IScheduledTopup>(
     // Status & Execution
     status: {
       type: String,
-      enum: ['active', 'paused', 'completed', 'cancelled', 'failed'],
+      enum: ['active', 'paused', 'processing', 'completed', 'cancelled', 'failed'],
       default: 'active',
       index: true,
     },
@@ -214,6 +220,23 @@ const ScheduledTopupSchema = new Schema<IScheduledTopup>(
     nextExecutionAt: {
       type: Date,
       index: true,
+    },
+
+    // Execution claim bookkeeping. `processingStartedAt` stamps the
+    // atomic active -> processing claim so a later run can recover a
+    // claim whose executor died mid-flight. `currentOccurrenceAt` is
+    // the occurrence instant being executed (recurrence advances from
+    // it, never from wall-clock execution time). `pendingTransactionId`
+    // links the in-flight send while its provider outcome is unsettled.
+    processingStartedAt: {
+      type: Date,
+    },
+    currentOccurrenceAt: {
+      type: Date,
+    },
+    pendingTransactionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Transaction',
     },
 
     // Transaction History
@@ -235,7 +258,11 @@ const ScheduledTopupSchema = new Schema<IScheduledTopup>(
     },
     maxRetries: {
       type: Number,
-      default: 3,
+      // Consecutive failures before a schedule is marked failed. The
+      // executor pairs this with exponential backoff (see
+      // scheduled-topups.service), so the default spans days, not the
+      // ~15 minutes the old every-tick retry produced.
+      default: 10,
       min: 0,
     },
 
@@ -271,11 +298,14 @@ ScheduledTopupSchema.index({ organizationId: 1, status: 1, nextExecutionAt: 1 })
 ScheduledTopupSchema.index({ organizationId: 1, customerId: 1 });
 ScheduledTopupSchema.index({ status: 1, nextExecutionAt: 1 });
 
-// Prevent duplicate executions - ensure lastExecutedAt is unique per schedule when not null
-ScheduledTopupSchema.index(
-  { _id: 1, lastExecutedAt: 1 },
-  { unique: true, sparse: true }
-);
+// Duplicate-execution guard: the previous unique index on
+// { _id, lastExecutedAt } could never reject anything (_id is unique
+// on its own), so it has been removed. The real guard lives on the
+// Transaction collection: a unique partial index on
+// metadata.scheduledOccurrenceKey ("<scheduleId>:<occurrence ISO>")
+// makes it impossible to create two send transactions for the same
+// scheduled occurrence, and the executor claims schedules atomically
+// (active -> processing) before sending.
 
 export const ScheduledTopup =
   mongoose.models.ScheduledTopup ||
