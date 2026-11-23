@@ -36,7 +36,7 @@ export interface UpdateScheduledTopupRequest {
  * Query parameters for listing scheduled top-ups
  */
 export interface ListScheduledTopupsQuery {
-  status?: 'active' | 'paused' | 'completed' | 'cancelled' | 'failed';
+  status?: 'active' | 'paused' | 'processing' | 'completed' | 'cancelled' | 'failed';
   phoneNumber?: string;
   customerId?: string;
   fromDate?: string; // ISO 8601
@@ -66,7 +66,7 @@ export interface ScheduledTopupResponse {
   scheduledDate: string;
   timezone: string;
   recurrence: RecurrenceConfig;
-  status: 'active' | 'paused' | 'completed' | 'cancelled' | 'failed';
+  status: 'active' | 'paused' | 'processing' | 'completed' | 'cancelled' | 'failed';
   executionCount: number;
   lastExecutedAt?: string;
   nextExecutionAt?: string;
@@ -100,7 +100,7 @@ export interface DetailedScheduledTopupResponse {
   scheduledDate: string;
   timezone: string;
   recurrence: RecurrenceConfig;
-  status: 'active' | 'paused' | 'completed' | 'cancelled' | 'failed';
+  status: 'active' | 'paused' | 'processing' | 'completed' | 'cancelled' | 'failed';
   executionCount: number;
   lastExecutedAt?: string;
   nextExecutionAt?: string;
@@ -143,7 +143,7 @@ export interface ScheduleExecutionResult {
   transactionId?: string;
   error?: string;
   nextExecutionAt?: string;
-  status: 'active' | 'paused' | 'completed' | 'cancelled' | 'failed';
+  status: 'active' | 'paused' | 'processing' | 'completed' | 'cancelled' | 'failed';
 }
 
 /**
