@@ -71,6 +71,7 @@ export interface IScheduledTopup extends Document {
   processingStartedAt?: Date;
   currentOccurrenceAt?: Date;
   pendingTransactionId?: Types.ObjectId;
+  pendingReservationHeld?: boolean;
 
   // Transaction History
   transactions: Types.ObjectId[];
@@ -237,6 +238,13 @@ const ScheduledTopupSchema = new Schema<IScheduledTopup>(
     pendingTransactionId: {
       type: Schema.Types.ObjectId,
       ref: 'Transaction',
+    },
+    // Whether the wallet reservation for the pending transaction is
+    // currently held (persisted). Settlement/recovery release or
+    // deduct exactly this reservation — never a guessed amount.
+    pendingReservationHeld: {
+      type: Boolean,
+      default: false,
     },
 
     // Transaction History

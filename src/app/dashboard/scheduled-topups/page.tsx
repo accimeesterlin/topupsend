@@ -142,6 +142,7 @@ export default function ScheduledTopupsPage() {
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
       active: 'bg-green-100 text-green-800',
+      processing: 'bg-purple-100 text-purple-800',
       paused: 'bg-yellow-100 text-yellow-800',
       completed: 'bg-blue-100 text-blue-800',
       cancelled: 'bg-gray-100 text-gray-800',
@@ -195,6 +196,7 @@ export default function ScheduledTopupsPage() {
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
+          <option value="processing">Processing</option>
           <option value="paused">Paused</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>

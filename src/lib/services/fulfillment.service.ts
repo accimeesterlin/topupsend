@@ -931,7 +931,17 @@ export async function settleStuckTransfer(
     // nobody paid, while the partner (e.g. PGecom) refunds its own
     // organization separately. A failed partner transfer simply
     // records "failed" for the partner to read.
-    if ((transaction as { paymentGateway?: string }).paymentGateway === "partner") {
+    //
+    // Scheduled sends (metadata.scheduledTopupId) are the same shape:
+    // they are funded by the ORG WALLET, and the scheduled-topups
+    // settlement pass releases the held wallet reservation itself.
+    // Crediting a by-phone customer here would mint money from
+    // nothing, so they record "failed" too.
+    if (
+      (transaction as { paymentGateway?: string }).paymentGateway ===
+        "partner" ||
+      (transaction.metadata as Record<string, unknown>)?.scheduledTopupId
+    ) {
       transaction.status = "failed";
       transaction.timeline.failedAt = new Date();
       transaction.metadata.failureReason =
