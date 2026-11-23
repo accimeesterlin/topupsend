@@ -41,6 +41,7 @@ const mockPollTransferStatus = jest.fn();
 const mockSettleStuckTransfer = jest.fn();
 
 let mockKeyScopes: string[] = ["topup:send", "transactions:read"];
+let mockKeyOwnerType = "staff";
 let mockKeyFound = true;
 let mockLastTransactionCtorArgs: Record<string, unknown> | null = null;
 
@@ -83,7 +84,7 @@ jest.mock("@topupsend/db", () => ({
           _id: "key1",
           orgId: "org1",
           ownerId: "owner1",
-          ownerType: "staff",
+          ownerType: mockKeyOwnerType,
           scopes: mockKeyScopes,
           expiresAt: undefined,
           isActive: true,
@@ -173,6 +174,7 @@ function integrationOk() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockKeyScopes = ["topup:send", "transactions:read"];
+  mockKeyOwnerType = "staff";
   mockKeyFound = true;
   mockLastTransactionCtorArgs = null;
 });
@@ -246,6 +248,49 @@ describe("partner API — auth", () => {
 
     expect(response.status).toBe(401);
     expect(mockLookupPOST).not.toHaveBeenCalled();
+  });
+
+  // RBAC C2: the partner API is funded by the key's ORGANIZATION, so
+  // a customer-owned key must be rejected on owner class alone —
+  // even one carrying the right scopes. (Pre-fix, this key sent real
+  // top-ups charged to the org's DingConnect account.)
+  it("rejects a customer-owned key on the send endpoint (403)", async () => {
+    mockKeyOwnerType = "customer";
+
+    const response = await topupsPOST(
+      postRequest(
+        "http://localhost/api/v1/partner/topups",
+        { phoneNumber: "+50934748112", skuCode: "SKU1" },
+        { ...API_KEY_HEADERS, "idempotency-key": "idem-customer" },
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockDing.sendTransfer).not.toHaveBeenCalled();
+    expect(MockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a customer-owned key on lookup and status reads (403)", async () => {
+    mockKeyOwnerType = "customer";
+
+    const lookupResponse = await lookupPOST(
+      postRequest(
+        "http://localhost/api/v1/partner/lookup",
+        { phoneNumber: "+50934748112" },
+        { ...API_KEY_HEADERS },
+      ),
+    );
+    expect(lookupResponse.status).toBe(403);
+    expect(mockLookupPOST).not.toHaveBeenCalled();
+
+    const statusResponse = await topupStatusGET(
+      getRequest("http://localhost/api/v1/partner/topups/ORD-1", {
+        ...API_KEY_HEADERS,
+      }),
+      { params: Promise.resolve({ orderId: "ORD-1" }) },
+    );
+    expect(statusResponse.status).toBe(403);
+    expect(mockTransactionFindOne).not.toHaveBeenCalled();
   });
 });
 
