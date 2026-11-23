@@ -37,13 +37,12 @@ Created complete REST API:
 - ✅ `POST /api/v1/scheduled-topups/[id]/pause` - Pause schedule
 - ✅ `POST /api/v1/scheduled-topups/[id]/resume` - Resume schedule
 
-### 5. Cron Job System (`src/lib/jobs/scheduled-topups.job.ts`)
-- ✅ node-cron integration
-- ✅ Runs every 5 minutes (configurable via env)
-- ✅ Overlap prevention
-- ✅ Comprehensive logging
-- ✅ Error handling with retry logic
-- ✅ Integrated into `src/instrumentation.ts` for auto-start
+### 5. Cron Trigger (`src/app/api/v1/cron/scheduled-topups/route.ts`)
+- ✅ Vercel Cron route, registered in `vercel.json` (every 5 minutes)
+- ✅ Fails closed without `CRON_SECRET`; requires the `Authorization: Bearer <CRON_SECRET>` header
+- ✅ Kill switch: execution runs only when `SCHEDULED_TOPUPS_ENABLED` is exactly `true`
+- ✅ Atomic per-schedule claim prevents double-fires; stale claims recover on later ticks
+- ✅ (Replaced the former in-process node-cron job in `src/lib/jobs/` + `src/instrumentation.ts` — deleted 2026-11-22 so there is exactly one trigger path)
 
 ### 6. UI Components
 - ✅ `ScheduleTopupForm` (`src/components/scheduled-topups/schedule-form.tsx`)
@@ -65,9 +64,9 @@ Created complete REST API:
 
 ### 7. Environment Configuration
 - ✅ Added to `.env.example`:
-  - `SCHEDULED_TOPUPS_ENABLED` - Enable/disable cron job
-  - `SCHEDULED_TOPUPS_CRON` - Cron schedule pattern
-  - `SCHEDULED_TOPUPS_CONCURRENCY` - Max concurrent executions
+  - `SCHEDULED_TOPUPS_ENABLED` - Kill switch; the cron route executes only when exactly `true`
+  - `CRON_SECRET` - Shared with the other cron routes; required by the cron endpoint
+  - (Removed 2026-11-22: `SCHEDULED_TOPUPS_CRON` and `SCHEDULED_TOPUPS_CONCURRENCY` were documented but never read by any code — the schedule lives in `vercel.json` and execution is sequential per tick)
 
 ---
 
@@ -238,8 +237,7 @@ Once TypeScript errors are fixed, test the following:
 Add to your `.env` file:
 ```bash
 SCHEDULED_TOPUPS_ENABLED=true
-SCHEDULED_TOPUPS_CRON=*/5 * * * *
-SCHEDULED_TOPUPS_CONCURRENCY=5
+CRON_SECRET=<shared cron secret>
 ```
 
 ### 2. Fix TypeScript Errors
@@ -322,8 +320,9 @@ Check logs for:
            └─────────────────────┘
 
 ┌─────────────────────┐
-│   Cron Job          │
-│  (node-cron)        │
+│   Vercel Cron       │
+│  /api/v1/cron/      │
+│  scheduled-topups   │
 │  Runs every 5 min   │
 └──────────┬──────────┘
            │

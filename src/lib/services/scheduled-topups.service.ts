@@ -906,35 +906,48 @@ async function executeClaimedSchedule(
       await transaction.save();
     }
 
-    // Step 6: convert the reservation into a persisted deduction.
-    const balanceBefore = wallet.balance;
-    wallet.deduct(actualCost, true);
-    await wallet.save();
-    reservedHere = false;
+    // Step 6: settle the wallet leg.
+    if (validateOnly) {
+      // Test mode sent nothing real, and scheduled sends move money
+      // only at fire time — so the reservation is RELEASED, not
+      // debited. The occurrence still counts as executed (in test
+      // mode), mirroring how fulfillment completes validate-only
+      // transactions without a provider transfer.
+      wallet.releaseReservation(actualCost);
+      await wallet.save();
+      reservedHere = false;
+      schedule.pendingReservationHeld = false;
+    } else {
+      // Convert the reservation into a persisted deduction.
+      const balanceBefore = wallet.balance;
+      wallet.deduct(actualCost, true);
+      await wallet.save();
+      reservedHere = false;
 
-    await WalletTransaction.create({
-      orgId,
-      walletId: String(wallet._id),
-      type: 'purchase',
-      amount: -actualCost,
-      currency: wallet.currency,
-      balanceBefore,
-      balanceAfter: wallet.balance,
-      status: 'completed',
-      reference: {
-        type: 'order',
-        id: transaction.orderId,
-        description: `Scheduled top-up for ${schedule.phoneNumber}`,
-      },
-      metadata: {
-        processedBy: schedule.createdBy.toString(),
-      },
-    });
+      await WalletTransaction.create({
+        orgId,
+        walletId: String(wallet._id),
+        type: 'purchase',
+        amount: -actualCost,
+        currency: wallet.currency,
+        balanceBefore,
+        balanceAfter: wallet.balance,
+        status: 'completed',
+        reference: {
+          type: 'order',
+          id: transaction.orderId,
+          description: `Scheduled top-up for ${schedule.phoneNumber}`,
+        },
+        metadata: {
+          processedBy: schedule.createdBy.toString(),
+        },
+      });
 
-    void trackTransactionCompletion({
-      orgId,
-      transactionAmount: actualCost,
-    });
+      void trackTransactionCompletion({
+        orgId,
+        transactionAmount: actualCost,
+      });
+    }
 
     await finalizeScheduleSuccess(schedule, transaction);
     await sendScheduleNotification(schedule, 'success', transaction);
