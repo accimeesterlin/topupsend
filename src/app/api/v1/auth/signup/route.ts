@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Create UserOrganization record
-    await UserOrganization.create({
+    const membership = await UserOrganization.create({
       userId: user._id,
       orgId: org._id,
       roles: [UserRole.ADMIN],
@@ -96,11 +96,13 @@ export async function POST(request: NextRequest) {
       orgId: org._id.toString(),
     });
 
-    // Create session token
+    // Create session token — roles from the membership record just
+    // created (RBAC C1: every mint reads UserOrganization, never the
+    // legacy global user.roles).
     const token = await createToken({
       userId: user._id.toString(),
       email: user.email,
-      roles: user.roles,
+      roles: membership.roles,
       orgId: org._id.toString(),
       tv: user.tokenVersion ?? 0,
     });
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
         user: {
           id: user._id.toString(),
           email: user.email,
-          roles: user.roles,
+          roles: membership.roles,
           orgId: org._id.toString(),
         },
       },

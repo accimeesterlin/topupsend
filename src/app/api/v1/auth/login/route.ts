@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { dbConnection } from "@topupsend/db/connection";
 import { User } from "@topupsend/db/models/user.model";
-import { UserOrganization } from "@topupsend/db";
+import { resolveMembershipSession } from "@/lib/membership-session";
 import {
   verifyPassword,
   createToken,
@@ -120,48 +120,32 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
+    // RBAC C1: mint the session from the live membership record. The
+    // legacy global `user.roles` is written once at account creation
+    // and never updated, so reading it here resurrected demoted and
+    // removed members at their next sign-in. resolveMembershipSession
+    // binds the session to an ACTIVE UserOrganization (the recorded
+    // default org, else the most recent active membership) and takes
+    // the roles from that record; no active membership anywhere
+    // means no session.
+    const membership = await resolveMembershipSession(user);
+    if (!membership) {
+      throw ApiErrors.Forbidden(
+        "Your account is not an active member of any organization",
+      );
+    }
+
     logger.info("User logged in", {
       userId: user._id.toString(),
       email: user.email,
     });
 
-    // Ensure we have a default organization for the session.
-    // Some users may not have `user.orgId` set (e.g. invited users).
-    // Pick the most recent active UserOrganization and persist it on the user record.
-    let sessionOrgId = user.orgId ? user.orgId.toString() : undefined;
-
-    if (!sessionOrgId) {
-      const userOrg = await UserOrganization.findOne({
-        userId: user._id,
-        isActive: true,
-      })
-        .sort({ joinedAt: -1 })
-        .populate("orgId");
-      if (userOrg && (userOrg as any).orgId) {
-        try {
-          const orgIdStr =
-            (userOrg as any).orgId._id?.toString() ||
-            (userOrg as any).orgId.toString();
-          sessionOrgId = orgIdStr;
-          // Persist the chosen default org on the user so future logins are consistent
-          user.orgId = sessionOrgId as any;
-          await user.save();
-        } catch (err) {
-          // Non-fatal: if saving fails, still continue with a session org if found
-          logger.warn("Failed to persist default orgId on user", {
-            userId: user._id.toString(),
-            error: err,
-          });
-        }
-      }
-    }
-
     // Create session token
     const sessionPayload = {
       userId: user._id.toString(),
       email: user.email,
-      roles: user.roles,
-      orgId: sessionOrgId || "",
+      roles: membership.roles,
+      orgId: membership.orgId,
       tv: user.tokenVersion ?? 0,
     };
     const token = await createToken(sessionPayload);
@@ -174,8 +158,8 @@ export async function POST(request: NextRequest) {
       user: {
         id: user._id.toString(),
         email: user.email,
-        roles: user.roles,
-        orgId: user.orgId.toString(),
+        roles: membership.roles,
+        orgId: membership.orgId,
       },
     });
 

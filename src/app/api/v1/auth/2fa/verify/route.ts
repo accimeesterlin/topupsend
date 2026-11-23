@@ -3,7 +3,7 @@ import { User } from "@topupsend/db";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { dbConnection } from "@topupsend/db/connection";
 import { createToken, createSessionCookie, getJwtSecret } from "@/lib/auth";
-import { UserRole } from "@topupsend/types";
+import { resolveMembershipSession } from "@/lib/membership-session";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth-rate-limit";
 import {
   STAFF_PENDING_AUTH_COOKIE,
@@ -129,12 +129,28 @@ export async function POST(req: NextRequest) {
     user.twoFactorPendingExpires = undefined;
     await user.save();
 
+    // RBAC C1: mint from the live membership record, exactly like the
+    // password login — never from the stale global `user.roles`, and
+    // no session at all when no active membership remains.
+    const membership = await resolveMembershipSession(user);
+    if (!membership) {
+      const response = createErrorResponse(
+        "Your account is not an active member of any organization",
+        403,
+      );
+      response.headers.append(
+        "Set-Cookie",
+        clearPendingAuthCookie(STAFF_PENDING_AUTH_COOKIE),
+      );
+      return response;
+    }
+
     // Generate session token
     const token = await createToken({
       userId: user._id.toString(),
       email: user.email,
-      roles: user.roles as UserRole[],
-      orgId: user.orgId.toString(),
+      roles: membership.roles,
+      orgId: membership.orgId,
       tv: user.tokenVersion ?? 0,
     });
 
@@ -143,8 +159,8 @@ export async function POST(req: NextRequest) {
       user: {
         id: user._id,
         email: user.email,
-        roles: user.roles,
-        orgId: user.orgId,
+        roles: membership.roles,
+        orgId: membership.orgId,
       },
     });
 
