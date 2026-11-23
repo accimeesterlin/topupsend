@@ -40,6 +40,7 @@ const mockState = {
   users: [] as any[],
   customers: [] as any[],
   orgs: [] as any[],
+  userOrgs: [] as any[],
 };
 
 function mockMakeDoc(fields: Record<string, any>) {
@@ -264,7 +265,10 @@ jest.mock("@topupsend/db", () => ({
   Org: mockBuildOrgModel(),
   Organization: mockBuildOrgModel(),
   UserOrganization: {
-    findOne: jest.fn(() => mockQuery(null)),
+    // Store-backed (RBAC C1): session mints now resolve roles from
+    // the membership record, so the fake must answer membership
+    // lookups from seeded state instead of always returning null.
+    findOne: jest.fn((query: any) => mockFindOne(mockState.userOrgs, query)),
   },
   ApiKey: { findOne: jest.fn(() => mockQuery(null)) },
 }));
@@ -358,6 +362,21 @@ function seedStaffUser(overrides: Record<string, any> = {}) {
     ...overrides,
   });
   mockState.users.push(user);
+  // A staff user is a member of their org: seed the membership the
+  // session mints now read (roles mirror the user's at seed time;
+  // the RBAC suite seeds divergent memberships on purpose).
+  if (user.orgId) {
+    mockState.userOrgs.push(
+      mockMakeDoc({
+        _id: `uo-${user._id}`,
+        userId: user._id,
+        orgId: user.orgId,
+        roles: [...user.roles],
+        isActive: true,
+        joinedAt: new Date(),
+      }),
+    );
+  }
   return user;
 }
 
@@ -416,6 +435,7 @@ beforeEach(() => {
   mockState.users.length = 0;
   mockState.customers.length = 0;
   mockState.orgs.length = 0;
+  mockState.userOrgs.length = 0;
   mockCookieJar.clear();
 });
 
