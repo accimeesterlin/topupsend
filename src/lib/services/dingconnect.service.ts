@@ -148,6 +148,42 @@ export interface SendTransferResponse {
   ErrorCode?: string;
 }
 
+export interface ListTransferRecordsParams {
+  /** Filter by the DistributorRef the transfer was submitted with */
+  distributorRef?: string;
+  /** Filter by DingConnect's TransferRef */
+  transferRef?: string;
+  /** Filter by the targeted account number */
+  accountNumber?: string;
+  /** Records to bypass before returning the rest */
+  skip?: number;
+  /** Records to return (required by the endpoint) */
+  take?: number;
+}
+
+/** One transfer record as returned inside ListTransferRecords' Items. */
+export interface DingConnectTransferRecord {
+  TransferId: {
+    /** DingConnect's unique identifier for the transfer (numeric, as a string) */
+    TransferRef: string;
+    /** The distributor's identifier for the transfer (our orderId) */
+    DistributorRef: string;
+  };
+  SkuCode: string;
+  AccountNumber: string;
+  /** Current state of the transfer in DingConnect's system */
+  ProcessingState: string;
+  StartedUtc?: string;
+  CompletedUtc?: string;
+}
+
+/** Envelope item of POST /api/V1/ListTransferRecords (after Items extraction). */
+export interface DingConnectTransferRecordItem {
+  TransferRecord: DingConnectTransferRecord;
+  ResultCode: number;
+  ErrorCodes?: Array<{ Code: string }>;
+}
+
 export interface DingConnectProductDescription {
   /** Short description of the product */
   DisplayText: string;
@@ -387,6 +423,31 @@ export class DingConnectService {
    */
   async getTransferStatus(transferId: number): Promise<SendTransferResponse> {
     return this.request<SendTransferResponse>(`/api/V1/GetTransferStatus?TransferId=${transferId}`);
+  }
+
+  /**
+   * List transfer records previously submitted to DingConnect
+   * POST /api/V1/ListTransferRecords
+   *
+   * This is DingConnect's prescribed recovery for SendTransfer timeout
+   * scenarios: when a send's response never arrived, the transfer's
+   * outcome is unknown locally, but the transfer itself can be found
+   * again by the DistributorRef it was submitted with — which yields
+   * the TransferRef needed to poll GetTransferStatus. The endpoint
+   * requires `Take` in the request body; the response envelope's Items
+   * are extracted by the shared request helper like other list calls.
+   */
+  async listTransferRecords(params: ListTransferRecordsParams): Promise<DingConnectTransferRecordItem[]> {
+    return this.request<DingConnectTransferRecordItem[]>('/api/V1/ListTransferRecords', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(params.distributorRef ? { DistributorRef: params.distributorRef } : {}),
+        ...(params.transferRef ? { TransferRef: params.transferRef } : {}),
+        ...(params.accountNumber ? { AccountNumber: params.accountNumber } : {}),
+        Skip: params.skip ?? 0,
+        Take: params.take ?? 10,
+      }),
+    });
   }
 
   /**

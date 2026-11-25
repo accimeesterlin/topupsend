@@ -14,7 +14,10 @@
  *     browser closed mid-flow) are resumed into fulfillment. The
  *     atomic claim inside fulfillment makes this safe to race.
  *  3. `processing` orders stuck with an unknown transfer outcome are
- *     settled by polling DingConnect for the transfer's real status.
+ *     settled by polling DingConnect for the transfer's real status —
+ *     or, when the lost SendTransfer response means no provider
+ *     transfer id was ever recorded, by recovering the transfer through
+ *     its DistributorRef (ListTransferRecords).
  *
  * Every step is idempotent, so overlapping or repeated runs are safe.
  */
@@ -42,6 +45,7 @@ export interface ReconciliationSummary {
   paidResumed: number;
   settledCompleted: number;
   settledRefunded: number;
+  settledFailed: number;
   stillProcessing: number;
   skipped: number;
   errors: number;
@@ -57,6 +61,7 @@ export async function runReconciliationSweep(
     paidResumed: 0,
     settledCompleted: 0,
     settledRefunded: 0,
+    settledFailed: 0,
     stillProcessing: 0,
     skipped: 0,
     errors: 0,
@@ -210,12 +215,20 @@ export async function runReconciliationSweep(
   }
 
   // --- 3. Settle stuck processing transfers ---------------------------
+  // Two populations: transfers with a provider id (settled by polling
+  // GetTransferStatus) and unknown-outcome sends whose SendTransfer
+  // response was lost before the provider id could be recorded (settled
+  // by DistributorRef recovery inside settleStuckTransfer). Selecting
+  // only the first population stranded the second one forever.
   const stuckTransfers = await Transaction.find({
     status: "processing",
-    providerTransactionId: { $type: "string" },
     "timeline.processingAt": {
       $lt: new Date(now.getTime() - STUCK_PROCESSING_AFTER_MS),
     },
+    $or: [
+      { providerTransactionId: { $type: "string" } },
+      { "metadata.transferOutcome": "unknown" },
+    ],
   })
     .sort({ "timeline.processingAt": 1 })
     .limit(BATCH_SIZE);
@@ -225,6 +238,7 @@ export async function runReconciliationSweep(
       const result = await settleStuckTransfer(transaction);
       if (result === "completed") summary.settledCompleted++;
       else if (result === "refunded") summary.settledRefunded++;
+      else if (result === "failed") summary.settledFailed++;
       else if (result === "unknown") summary.stillProcessing++;
       else summary.skipped++;
     } catch (error) {
