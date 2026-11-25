@@ -862,10 +862,33 @@ function hasUsableProviderTransferId(transaction: ITransaction): boolean {
   return Number.isFinite(Number(transaction.providerTransactionId));
 }
 
+/**
+ * True when the transaction's outcome marker says the SendTransfer
+ * outcome is unknown: either stamped "unknown" by a send path, or
+ * absent entirely. The absent case is legacy records saved before
+ * metadata.transferOutcome was declared in the Transaction schema —
+ * strict mode silently dropped the stamp on save, so those records
+ * carry no marker even though their sends ended in exactly the same
+ * unknown state. A marker present with any other value is settled
+ * bookkeeping, not an unknown outcome.
+ */
+function hasUnknownTransferOutcome(transaction: ITransaction): boolean {
+  const outcome = (transaction.metadata as Record<string, unknown>)
+    ?.transferOutcome;
+  return outcome === "unknown" || outcome == null;
+}
+
 export async function settleStuckTransfer(
   transaction: ITransaction,
 ): Promise<SettleStuckTransferResult> {
   if (transaction.status !== "processing") {
+    return "skipped";
+  }
+
+  // Test-mode (ValidateOnly) sends never moved money and never created
+  // a real provider transfer; there is nothing to settle, and recovery
+  // must never fail one.
+  if (transaction.isTestMode) {
     return "skipped";
   }
 
@@ -876,10 +899,7 @@ export async function settleStuckTransfer(
     // DistributorRef it was submitted with — without that recovery the
     // transaction would stay "processing" forever, because every settle
     // path keys off the provider id.
-    if (
-      (transaction.metadata as Record<string, unknown>)?.transferOutcome ===
-      "unknown"
-    ) {
+    if (hasUnknownTransferOutcome(transaction)) {
       return recoverUnknownTransferOutcome(transaction);
     }
     // Non-numeric ids (e.g. TEST-...) are not provider transfers.
@@ -1020,6 +1040,13 @@ const UNKNOWN_OUTCOME_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
  * - No record, young (or a customer transaction, whose abandonment
  *   refund policy is not decided here) → stays "processing" and the
  *   result is "unknown" so the next sweep/read retries.
+ *
+ * Eligibility: the outcome marker may be stamped "unknown" OR be
+ * absent entirely — records saved before metadata.transferOutcome was
+ * declared in the Transaction schema lost the stamp to strict mode
+ * (see hasUnknownTransferOutcome). Test-mode transactions are never
+ * recovered: a ValidateOnly send created no real transfer, and failing
+ * one would be inventing an outcome for money that never moved.
  */
 export async function recoverUnknownTransferOutcome(
   transaction: ITransaction,
@@ -1029,7 +1056,8 @@ export async function recoverUnknownTransferOutcome(
 
   if (
     transaction.status !== "processing" ||
-    metadata?.transferOutcome !== "unknown" ||
+    transaction.isTestMode ||
+    !hasUnknownTransferOutcome(transaction) ||
     hasUsableProviderTransferId(transaction)
   ) {
     return "skipped";

@@ -215,11 +215,16 @@ export async function runReconciliationSweep(
   }
 
   // --- 3. Settle stuck processing transfers ---------------------------
-  // Two populations: transfers with a provider id (settled by polling
-  // GetTransferStatus) and unknown-outcome sends whose SendTransfer
+  // Three populations: transfers with a provider id (settled by polling
+  // GetTransferStatus); unknown-outcome sends whose SendTransfer
   // response was lost before the provider id could be recorded (settled
-  // by DistributorRef recovery inside settleStuckTransfer). Selecting
-  // only the first population stranded the second one forever.
+  // by DistributorRef recovery inside settleStuckTransfer); and legacy
+  // unknown-outcome sends saved before metadata.transferOutcome was
+  // declared in the Transaction schema — strict mode dropped the
+  // marker on save, so they carry neither an id nor the marker, only
+  // the absent providerTransactionId gives them away. Selecting only
+  // the first population stranded the second one forever; selecting
+  // only the first two would strand the third the same way.
   const stuckTransfers = await Transaction.find({
     status: "processing",
     "timeline.processingAt": {
@@ -228,6 +233,7 @@ export async function runReconciliationSweep(
     $or: [
       { providerTransactionId: { $type: "string" } },
       { "metadata.transferOutcome": "unknown" },
+      { providerTransactionId: { $exists: false } },
     ],
   })
     .sort({ "timeline.processingAt": 1 })
