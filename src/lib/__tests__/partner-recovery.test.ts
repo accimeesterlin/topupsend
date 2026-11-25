@@ -13,9 +13,16 @@
  * "processing" forever even though DingConnect executed the transfer
  * under DistributorRef = the transaction's orderId. Recovery finds the
  * transfer via ListTransferRecords (DingConnect's prescribed timeout
- * recovery), stamps the id, and settles through the ordinary poll
- * path. Partner failures must NEVER reach processRefund (it would
- * mint balance for a by-phone customer who never paid TopUpSend).
+ * recovery) and settles from the record's ProcessingState.
+ *
+ * Round 3: the TransferRef a record carries is NOT the id
+ * GetTransferStatus accepts — production logs showed a 404 for every
+ * poll of a recovered id — so recovery no longer stamps-and-polls.
+ * Terminal record states ("Complete" / "Failed" per DingConnect's
+ * Processing State documentation) settle through the same helpers the
+ * poll path uses; non-terminal states keep the stamps and stay
+ * processing. Partner failures must NEVER reach processRefund (it
+ * would mint balance for a by-phone customer who never paid TopUpSend).
  */
 const mockDing = {
   getTransferStatus: jest.fn(),
@@ -52,6 +59,9 @@ import {
   recoverUnknownTransferOutcome,
   settleStuckTransfer,
 } from "@/lib/services/fulfillment.service";
+import { trackTransactionCompletion } from "@/lib/services/usage-tracking.service";
+
+const mockTrackCompletion = trackTransactionCompletion as jest.Mock;
 
 const NOW = new Date("2026-11-24T12:00:00.000Z");
 
@@ -79,19 +89,29 @@ function makeStuckTx(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
-function recordFor(orderId: string, transferRef = "424242") {
+function recordFor(
+  orderId: string,
+  transferRef = "424242",
+  processingState = "Complete",
+) {
   return [
     {
       TransferRecord: {
         TransferId: { TransferRef: transferRef, DistributorRef: orderId },
         SkuCode: "D0HT",
         AccountNumber: "50937923033",
-        ProcessingState: "Complete",
+        ProcessingState: processingState,
       },
       ResultCode: 1,
       ErrorCodes: [],
     },
   ];
+}
+
+function failedRecordFor(orderId: string, transferRef = "424242") {
+  const records = recordFor(orderId, transferRef, "Failed");
+  records[0].ErrorCodes = [{ Code: "ProviderError" } as never];
+  return records;
 }
 
 beforeEach(() => {
@@ -100,13 +120,9 @@ beforeEach(() => {
 });
 
 describe("VERIFY DistributorRef recovery — record found", () => {
-  it("stamps the recovered provider id and completes when DingConnect says Completed", async () => {
+  it("stamps the recovered provider id and completes from the record's Complete state, without polling", async () => {
     const tx = makeStuckTx();
     mockDing.listTransferRecords.mockResolvedValue(recordFor(tx.orderId));
-    mockDing.getTransferStatus.mockResolvedValue({
-      TransferId: 424242,
-      Status: "Completed",
-    });
 
     // Driven through settleStuckTransfer, the entry point both the
     // reconciliation sweep and the partner status route call.
@@ -118,27 +134,109 @@ describe("VERIFY DistributorRef recovery — record found", () => {
     expect(tx.providerTransactionId).toBe("424242");
     expect(tx.metadata.dingTransferId).toBe(424242);
     expect(tx.metadata.recoveredViaDistributorRef).toBe(true);
-    expect(mockDing.getTransferStatus).toHaveBeenCalledWith(424242);
+    expect(tx.metadata.dingconnectProcessingState).toBe("Complete");
+    // A recovered TransferRef is NOT pollable: GetTransferStatus
+    // answers 404 for it (production logs, Nov 25 2026), so the
+    // settle must come from the record alone.
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
     expect(result).toBe("completed");
     expect(tx.status).toBe("completed");
+    expect(tx.metadata.transferOutcome).toBe("completed");
+    expect(tx.timeline.completedAt).toBeInstanceOf(Date);
+    // The completion side-effect path ran (usage tracking fires from
+    // handleCompletionSideEffects, exactly as on the poll path).
+    expect(mockTrackCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: tx.orgId }),
+    );
     expect(mockProcessRefund).not.toHaveBeenCalled();
   });
 
-  it("partner transaction: records failed WITHOUT processRefund when DingConnect says Failed", async () => {
-    const tx = makeStuckTx();
-    mockDing.listTransferRecords.mockResolvedValue(recordFor(tx.orderId));
-    mockDing.getTransferStatus.mockResolvedValue({
-      TransferId: 424242,
-      Status: "Failed",
-      ErrorMessage: "Provider rejected the transfer",
-      ErrorCode: "ProviderError",
+  it("already-stamped recovered transaction settles from the record, never by polling", async () => {
+    // The exact shape of the two live LadyDy transactions after the
+    // round-2 sweep stamped them: a numeric provider id that is a
+    // TransferRef, the recovery marker set, outcome still unknown.
+    // Polling that id 404s; the record's ProcessingState settles it.
+    const tx = makeStuckTx({
+      providerTransactionId: "875942086",
+      metadata: {
+        transferOutcome: "unknown",
+        recoveredViaDistributorRef: true,
+        dingTransferId: 875942086,
+        dingconnectProcessingState: "Complete",
+        failureReason:
+          "DingConnect request outcome unknown (possible timeout); awaiting status verification",
+      },
     });
+    mockDing.listTransferRecords.mockResolvedValue(
+      recordFor(tx.orderId, "875942086"),
+    );
+    mockDing.getTransferStatus.mockRejectedValue(
+      new Error("DingConnect API Error: 404 Not Found"),
+    );
+
+    const result = await settleStuckTransfer(tx);
+
+    expect(result).toBe("completed");
+    expect(tx.status).toBe("completed");
+    expect(mockDing.listTransferRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ distributorRef: tx.orderId }),
+    );
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+    expect(mockProcessRefund).not.toHaveBeenCalled();
+  });
+
+  it("partner transaction: records failed WITHOUT processRefund when the record says Failed", async () => {
+    const tx = makeStuckTx();
+    mockDing.listTransferRecords.mockResolvedValue(failedRecordFor(tx.orderId));
 
     const result = await recoverUnknownTransferOutcome(tx, NOW);
 
     expect(result).toBe("failed");
     expect(tx.status).toBe("failed");
-    expect(tx.metadata.failureReason).toBe("Provider rejected the transfer");
+    expect(tx.metadata.failureReason).toBe(
+      "DingConnect transfer failed (confirmed by transfer record)",
+    );
+    expect(tx.metadata.dingconnectErrorCode).toBe("ProviderError");
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+    expect(mockProcessRefund).not.toHaveBeenCalled();
+  });
+
+  it("customer transaction: takes the refund path when the record says Failed", async () => {
+    const tx = makeStuckTx({ paymentGateway: "pgpay" });
+    mockDing.listTransferRecords.mockResolvedValue(failedRecordFor(tx.orderId));
+
+    const result = await recoverUnknownTransferOutcome(tx, NOW);
+
+    expect(result).toBe("refunded");
+    expect(mockProcessRefund).toHaveBeenCalledTimes(1);
+    expect(mockProcessRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failureReason:
+          "DingConnect transfer failed (confirmed by transfer record)",
+        additionalMetadata: expect.objectContaining({
+          dingconnectErrorCode: "ProviderError",
+          refundSource: "reconciliation_sweep",
+        }),
+      }),
+    );
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+  });
+
+  it("non-terminal record state: stamps the id and stays processing for the next sweep", async () => {
+    const tx = makeStuckTx();
+    mockDing.listTransferRecords.mockResolvedValue(
+      recordFor(tx.orderId, "424242", "Processing"),
+    );
+
+    const result = await recoverUnknownTransferOutcome(tx, NOW);
+
+    expect(result).toBe("unknown");
+    expect(tx.status).toBe("processing");
+    expect(tx.providerTransactionId).toBe("424242");
+    expect(tx.metadata.dingTransferId).toBe(424242);
+    expect(tx.metadata.recoveredViaDistributorRef).toBe(true);
+    expect(tx.metadata.dingconnectProcessingState).toBe("Processing");
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
     expect(mockProcessRefund).not.toHaveBeenCalled();
   });
 });
