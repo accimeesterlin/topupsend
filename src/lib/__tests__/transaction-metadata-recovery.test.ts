@@ -27,6 +27,14 @@
  *     end-to-end through DistributorRef recovery.
  *  4. Test-mode (ValidateOnly) records are never settled or failed
  *     by recovery.
+ *  5. Round 3: recovery settles FROM the transfer record's
+ *     ProcessingState. A recovered TransferRef is not pollable —
+ *     GetTransferStatus 404s on it (production logs) — so records
+ *     already stamped by an earlier recovery (the exact shape of the
+ *     two live LadyDy transactions) settle from the record on the
+ *     next sweep, terminal-failed partner records record "failed"
+ *     without a refund, and non-terminal records keep their stamps
+ *     and stay processing. Every case asserts on RE-FETCHED state.
  *
  * Only DingConnect, the refund service, usage tracking and the logger
  * are mocked. Persistence, models and the sweep are real.
@@ -125,19 +133,29 @@ function baseTx(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function recordFor(orderId: string, transferRef = "424242") {
+function recordFor(
+  orderId: string,
+  transferRef = "424242",
+  processingState = "Complete",
+) {
   return [
     {
       TransferRecord: {
         TransferId: { TransferRef: transferRef, DistributorRef: orderId },
         SkuCode: "D0HT",
         AccountNumber: "50937923033",
-        ProcessingState: "Complete",
+        ProcessingState: processingState,
       },
       ResultCode: 1,
       ErrorCodes: [],
     },
   ];
+}
+
+function failedRecordFor(orderId: string, code = "InsufficientBalance") {
+  const records = recordFor(orderId, "424242", "Failed");
+  records[0].ErrorCodes = [{ Code: code } as never];
+  return records;
 }
 
 describe("Transaction metadata schema persistence (real model)", () => {
@@ -314,6 +332,11 @@ describe("Reconciliation sweep — legacy records without the marker", () => {
     expect(after!.metadata!.dingTransferId).toBe(424242);
     expect(after!.metadata!.recoveredViaDistributorRef).toBe(true);
     expect(after!.metadata!.transferOutcome).toBe("completed");
+    // Round 3: the settle came from the record's ProcessingState.
+    // Even though a poll WOULD have answered "Completed" here, the
+    // recovered TransferRef must never be polled — in production
+    // that poll 404s and the transaction never settles.
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
     expect(mockProcessRefund).not.toHaveBeenCalled();
   });
 
@@ -387,6 +410,129 @@ describe("Reconciliation sweep — legacy records without the marker", () => {
     const after = await Transaction.findById(tx._id).lean();
     expect(after!.status).toBe("processing");
     expect(after!.metadata!.failureReason).toBeUndefined();
+    expect(mockProcessRefund).not.toHaveBeenCalled();
+  });
+});
+
+describe("Reconciliation sweep — round 3: settle from the record's ProcessingState", () => {
+  beforeEach(async () => {
+    await seedOrg();
+  });
+
+  it("already-stamped recovered record (the live LadyDy shape) completes from the record while polling 404s", async () => {
+    // Exactly what the round-2 sweep left in production: the
+    // TransferRef stamped as providerTransactionId, the recovery
+    // markers persisted, outcome still "unknown" — and every
+    // GetTransferStatus poll for that id answering 404.
+    const tx = await Transaction.create(
+      baseTx({
+        orderId: "ORD-1795489828319-A3YNSGO5J",
+        status: "processing",
+        providerTransactionId: "875942086",
+        metadata: {
+          retryCount: 0,
+          transferOutcome: "unknown",
+          dingTransferId: 875942086,
+          dingconnectProcessingState: "Complete",
+          recoveredViaDistributorRef: true,
+          failureReason:
+            "DingConnect request outcome unknown (possible timeout); awaiting status verification",
+        },
+        timeline: {
+          createdAt: new Date(Date.now() - 2 * HOUR),
+          processingAt: new Date(Date.now() - 2 * HOUR),
+        },
+      }),
+    );
+    mockDing.listTransferRecords.mockResolvedValue(
+      recordFor("ORD-1795489828319-A3YNSGO5J", "875942086"),
+    );
+    mockDing.getTransferStatus.mockRejectedValue(
+      new Error(
+        'DingConnect API Error: 404 Not Found | URL: /api/V1/GetTransferStatus?TransferId=875942086 | Response: {"message":"Not Found"}',
+      ),
+    );
+
+    const summary = await runReconciliationSweep();
+
+    expect(summary.settledCompleted).toBe(1);
+    expect(summary.stillProcessing).toBe(0);
+    expect(summary.errors).toBe(0);
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+
+    const after = await Transaction.findById(tx._id).lean();
+    expect(after!.status).toBe("completed");
+    expect(after!.providerTransactionId).toBe("875942086");
+    expect(after!.metadata!.transferOutcome).toBe("completed");
+    expect(after!.timeline!.completedAt).toBeDefined();
+    expect(mockProcessRefund).not.toHaveBeenCalled();
+  });
+
+  it("legacy partner record whose transfer record says Failed: sweep records failed, error code stamped, no refund", async () => {
+    const tx = await Transaction.create(
+      baseTx({
+        orderId: "ORD-1795550885624-B3A2I3XH1",
+        status: "processing",
+        metadata: { retryCount: 0, isVariableValue: true },
+        timeline: {
+          createdAt: new Date(Date.now() - 2 * HOUR),
+          processingAt: new Date(Date.now() - 2 * HOUR),
+        },
+      }),
+    );
+    mockDing.listTransferRecords.mockResolvedValue(
+      failedRecordFor("ORD-1795550885624-B3A2I3XH1"),
+    );
+
+    const summary = await runReconciliationSweep();
+
+    expect(summary.settledFailed).toBe(1);
+    expect(summary.errors).toBe(0);
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+    expect(mockProcessRefund).not.toHaveBeenCalled();
+
+    const after = await Transaction.findById(tx._id).lean();
+    expect(after!.status).toBe("failed");
+    expect(after!.providerTransactionId).toBe("424242");
+    expect(after!.metadata!.dingconnectProcessingState).toBe("Failed");
+    expect(after!.metadata!.dingconnectErrorCode).toBe(
+      "InsufficientBalance",
+    );
+    expect(after!.metadata!.failureReason).toBe(
+      "DingConnect transfer failed (confirmed by transfer record)",
+    );
+  });
+
+  it("legacy record whose transfer is still Processing at the provider: stamps persist, stays processing", async () => {
+    const tx = await Transaction.create(
+      baseTx({
+        status: "processing",
+        metadata: { retryCount: 0 },
+        timeline: {
+          createdAt: new Date(Date.now() - 2 * HOUR),
+          processingAt: new Date(Date.now() - 2 * HOUR),
+        },
+      }),
+    );
+    mockDing.listTransferRecords.mockImplementation(
+      async (args: { distributorRef: string }) =>
+        recordFor(args.distributorRef, "424242", "Processing"),
+    );
+
+    const summary = await runReconciliationSweep();
+
+    expect(summary.settledCompleted).toBe(0);
+    expect(summary.settledFailed).toBe(0);
+    expect(summary.stillProcessing).toBe(1);
+    expect(mockDing.getTransferStatus).not.toHaveBeenCalled();
+
+    const after = await Transaction.findById(tx._id).lean();
+    expect(after!.status).toBe("processing");
+    expect(after!.providerTransactionId).toBe("424242");
+    expect(after!.metadata!.dingconnectProcessingState).toBe(
+      "Processing",
+    );
+    expect(after!.metadata!.recoveredViaDistributorRef).toBe(true);
     expect(mockProcessRefund).not.toHaveBeenCalled();
   });
 });
