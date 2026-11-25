@@ -1096,9 +1096,22 @@ const UNKNOWN_OUTCOME_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
  * the transfer by that reference (their prescribed timeout recovery):
  *
  * - Record found → stamp providerTransactionId / metadata.dingTransferId
- *   and settle through the ordinary settleStuckTransfer poll path, with
- *   all of its existing terminal handling (completion side effects;
+ *   and settle FROM THE RECORD's ProcessingState, through the same
+ *   terminal handling the poll path uses (completion side effects;
  *   partner/scheduled failures record "failed", never processRefund).
+ *   The record is settled from its state rather than re-polled because
+ *   the id it yields is a TransferRef, and GetTransferStatus does not
+ *   accept TransferRefs — production logs (Nov 25 2026) show a 404 for
+ *   every poll of a recovered id, while the record itself already
+ *   carries the authoritative outcome.
+ *   ProcessingState vocabulary (DingConnect API documentation,
+ *   "Processing State"): Submitted, Processing, Complete, Failed,
+ *   Cancelled, Cancelling. Only "Complete" (finished, successful) and
+ *   "Failed" (finished, error) are terminal. Everything else —
+ *   including Cancelled/Cancelling — is treated as non-terminal: the
+ *   stamps are saved and the transaction stays "processing", so the
+ *   next sweep re-reads the record instead of recovery inventing an
+ *   outcome from an intermediate state.
  * - No record, partner-shaped, older than 24h → the send definitively
  *   never reached the provider; record "failed" so the partner's own
  *   sweep can refund its customer. NEVER processRefund: partner and
@@ -1124,7 +1137,12 @@ export async function recoverUnknownTransferOutcome(
     transaction.status !== "processing" ||
     transaction.isTestMode ||
     !hasUnknownTransferOutcome(transaction) ||
-    hasUsableProviderTransferId(transaction)
+    // A usable provider id normally means the poll path owns this
+    // transaction — unless the id is a TransferRef recovery itself
+    // stamped, which cannot be polled (see hasRecoveredTransferRef)
+    // and whose outcome only the record can settle.
+    (hasUsableProviderTransferId(transaction) &&
+      !hasRecoveredTransferRef(transaction))
   ) {
     return "skipped";
   }
@@ -1177,8 +1195,9 @@ export async function recoverUnknownTransferOutcome(
       return "unknown";
     }
 
-    // Stamp the provider id the lost SendTransfer response carried,
-    // then settle exactly as the ordinary poll path does.
+    // Stamp the provider reference the lost SendTransfer response
+    // would have carried, so the settled record keeps it (PGecom
+    // displays it instead of "undefined").
     transaction.providerTransactionId = String(transferRef);
     (transaction.metadata as Record<string, unknown>).dingTransferId =
       Number(transferRef);
@@ -1195,7 +1214,34 @@ export async function recoverUnknownTransferOutcome(
       processingState: match.TransferRecord.ProcessingState,
     });
 
-    return settleStuckTransfer(transaction);
+    // Settle from the record's own ProcessingState — NOT by polling
+    // GetTransferStatus with the TransferRef, which that endpoint
+    // rejects with a 404 (see hasRecoveredTransferRef). Only
+    // "Complete" and "Failed" are terminal; any other state leaves
+    // the transaction "processing" with the stamps saved above, and
+    // the next sweep re-reads the record.
+    const processingState = match.TransferRecord.ProcessingState;
+    if (processingState !== "Complete" && processingState !== "Failed") {
+      return "unknown";
+    }
+
+    const storefrontSettings = await StorefrontSettings.findOne({
+      orgId: transaction.orgId,
+    });
+    if (!storefrontSettings) {
+      // Mirror the poll path: without storefront settings the
+      // completion bookkeeping cannot run, so do not settle yet.
+      return "skipped";
+    }
+
+    if (processingState === "Complete") {
+      return settleTransferCompleted(transaction, storefrontSettings);
+    }
+    return settleTransferFailed(transaction, {
+      errorCode: match.ErrorCodes?.[0]?.Code,
+      fallbackReason:
+        "DingConnect transfer failed (confirmed by transfer record)",
+    });
   }
 
   // No transfer exists at DingConnect under this order's DistributorRef.

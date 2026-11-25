@@ -432,10 +432,14 @@ export class DingConnectService {
    * This is DingConnect's prescribed recovery for SendTransfer timeout
    * scenarios: when a send's response never arrived, the transfer's
    * outcome is unknown locally, but the transfer itself can be found
-   * again by the DistributorRef it was submitted with — which yields
-   * the TransferRef needed to poll GetTransferStatus. The endpoint
-   * requires `Take` in the request body; the response envelope's Items
-   * are extracted by the shared request helper like other list calls.
+   * again by the DistributorRef it was submitted with. The record's
+   * ProcessingState is the authoritative outcome for a recovered
+   * transfer: the TransferRef it carries is NOT accepted by
+   * GetTransferStatus (404 in production, Nov 25 2026), so recovered
+   * transfers are settled from the record, never re-polled. The
+   * endpoint requires `Take` in the request body; the response
+   * envelope's Items are extracted by the shared request helper like
+   * other list calls.
    */
   async listTransferRecords(params: ListTransferRecordsParams): Promise<DingConnectTransferRecordItem[]> {
     return this.request<DingConnectTransferRecordItem[]>('/api/V1/ListTransferRecords', {
