@@ -878,6 +878,104 @@ function hasUnknownTransferOutcome(transaction: ITransaction): boolean {
   return outcome === "unknown" || outcome == null;
 }
 
+/**
+ * True when the transaction's provider id was stamped by DistributorRef
+ * recovery: it is the transfer record's TransferRef, NOT the TransferId
+ * a SendTransfer response carries. GetTransferStatus 404s on
+ * TransferRefs (production logs, Nov 25 2026: every poll for a
+ * recovered id returns "404 Not Found"), so a recovered id can never
+ * be settled by polling — the transfer record's ProcessingState is
+ * the only authoritative outcome for such transfers.
+ */
+function hasRecoveredTransferRef(transaction: ITransaction): boolean {
+  return (
+    (transaction.metadata as Record<string, unknown>)
+      ?.recoveredViaDistributorRef === true
+  );
+}
+
+/**
+ * Terminal settle for a transfer known to have completed at
+ * DingConnect: persist the completed state FIRST, then run the
+ * (failure-isolated) completion bookkeeping. Shared by the
+ * settleStuckTransfer poll path and by DistributorRef recovery, which
+ * learns the same outcome from the transfer record's ProcessingState.
+ */
+async function settleTransferCompleted(
+  transaction: ITransaction,
+  storefrontSettings: Parameters<typeof safeCompletionSideEffects>[1],
+): Promise<"completed"> {
+  transaction.status = "completed";
+  transaction.timeline.completedAt = new Date();
+  (transaction.metadata as Record<string, unknown>).transferOutcome =
+    "completed";
+  await transaction.save();
+
+  const phoneNumber = transaction.recipient.phoneNumber || "";
+  const maskedPhone = phoneNumber
+    ? `${phoneNumber.slice(0, 4)}****${phoneNumber.slice(-2)}`
+    : "****";
+  await safeCompletionSideEffects(
+    transaction,
+    storefrontSettings,
+    maskedPhone,
+  );
+  return "completed";
+}
+
+/**
+ * Terminal settle for a transfer known to have failed at DingConnect.
+ * Shared by the poll path and by DistributorRef recovery.
+ *
+ * Partner sends (paymentGateway "partner") have no customer and no
+ * customer payment to refund: processRefund would find or CREATE a
+ * customer by phone and credit their balance with money nobody paid,
+ * while the partner (e.g. PGecom) refunds its own organization
+ * separately. A failed partner transfer simply records "failed" for
+ * the partner to read.
+ *
+ * Scheduled sends (metadata.scheduledTopupId) are the same shape:
+ * they are funded by the ORG WALLET, and the scheduled-topups
+ * settlement pass releases the held wallet reservation itself.
+ * Crediting a by-phone customer here would mint money from nothing,
+ * so they record "failed" too.
+ *
+ * Any other (customer) transaction is refunded via processRefund,
+ * exactly as the poll path has always done.
+ */
+async function settleTransferFailed(
+  transaction: ITransaction,
+  failure: {
+    errorMessage?: string;
+    errorCode?: string;
+    fallbackReason: string;
+  },
+): Promise<"failed" | "refunded"> {
+  if (
+    (transaction as { paymentGateway?: string }).paymentGateway ===
+      "partner" ||
+    (transaction.metadata as Record<string, unknown>)?.scheduledTopupId
+  ) {
+    transaction.status = "failed";
+    transaction.timeline.failedAt = new Date();
+    transaction.metadata.failureReason =
+      failure.errorMessage || failure.fallbackReason;
+    (transaction.metadata as Record<string, unknown>).dingconnectErrorCode =
+      failure.errorCode;
+    await transaction.save();
+    return "failed";
+  }
+  await processRefund({
+    transaction,
+    failureReason: failure.errorMessage || failure.fallbackReason,
+    additionalMetadata: {
+      dingconnectErrorCode: failure.errorCode,
+      refundSource: "reconciliation_sweep",
+    },
+  });
+  return "refunded";
+}
+
 export async function settleStuckTransfer(
   transaction: ITransaction,
 ): Promise<SettleStuckTransferResult> {
@@ -904,6 +1002,21 @@ export async function settleStuckTransfer(
     }
     // Non-numeric ids (e.g. TEST-...) are not provider transfers.
     return "skipped";
+  }
+
+  if (
+    hasRecoveredTransferRef(transaction) &&
+    hasUnknownTransferOutcome(transaction)
+  ) {
+    // The provider id on this transaction is a TransferRef stamped by
+    // an earlier DistributorRef recovery. It looks numeric, but
+    // GetTransferStatus does not accept it (404 on every poll), so the
+    // poll path below could never settle this transaction. Its
+    // outcome lives in the transfer record's ProcessingState —
+    // recovery re-reads the record and settles from there. Genuine
+    // SendTransfer ids never carry the recovery marker and keep using
+    // the poll path unchanged.
+    return recoverUnknownTransferOutcome(transaction);
   }
 
   const transferId = Number(transaction.providerTransactionId);
@@ -944,63 +1057,16 @@ export async function settleStuckTransfer(
   }
 
   if (finalResult.Status === "Completed") {
-    transaction.status = "completed";
-    transaction.timeline.completedAt = new Date();
-    (transaction.metadata as Record<string, unknown>).transferOutcome =
-      "completed";
-    await transaction.save();
-
-    const phoneNumber = transaction.recipient.phoneNumber || "";
-    const maskedPhone = phoneNumber
-      ? `${phoneNumber.slice(0, 4)}****${phoneNumber.slice(-2)}`
-      : "****";
-    await safeCompletionSideEffects(
-      transaction,
-      storefrontSettings,
-      maskedPhone,
-    );
-    return "completed";
+    return settleTransferCompleted(transaction, storefrontSettings);
   }
 
   if (finalResult.Status === "Failed") {
-    // Partner sends (paymentGateway "partner") have no customer and
-    // no customer payment to refund: processRefund would find or
-    // CREATE a customer by phone and credit their balance with money
-    // nobody paid, while the partner (e.g. PGecom) refunds its own
-    // organization separately. A failed partner transfer simply
-    // records "failed" for the partner to read.
-    //
-    // Scheduled sends (metadata.scheduledTopupId) are the same shape:
-    // they are funded by the ORG WALLET, and the scheduled-topups
-    // settlement pass releases the held wallet reservation itself.
-    // Crediting a by-phone customer here would mint money from
-    // nothing, so they record "failed" too.
-    if (
-      (transaction as { paymentGateway?: string }).paymentGateway ===
-        "partner" ||
-      (transaction.metadata as Record<string, unknown>)?.scheduledTopupId
-    ) {
-      transaction.status = "failed";
-      transaction.timeline.failedAt = new Date();
-      transaction.metadata.failureReason =
-        finalResult.ErrorMessage ||
-        "DingConnect transfer failed (confirmed by status poll)";
-      (transaction.metadata as Record<string, unknown>).dingconnectErrorCode =
-        finalResult.ErrorCode;
-      await transaction.save();
-      return "failed";
-    }
-    await processRefund({
-      transaction,
-      failureReason:
-        finalResult.ErrorMessage ||
+    return settleTransferFailed(transaction, {
+      errorMessage: finalResult.ErrorMessage,
+      errorCode: finalResult.ErrorCode,
+      fallbackReason:
         "DingConnect transfer failed (confirmed by status poll)",
-      additionalMetadata: {
-        dingconnectErrorCode: finalResult.ErrorCode,
-        refundSource: "reconciliation_sweep",
-      },
     });
-    return "refunded";
   }
 
   (transaction.metadata as Record<string, unknown>).dingconnectStatus =
