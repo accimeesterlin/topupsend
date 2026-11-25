@@ -204,8 +204,17 @@ describe("VERIFY regression pins — ordinary settle path unchanged", () => {
     expect(mockDing.listTransferRecords).not.toHaveBeenCalled();
   });
 
-  it("no provider id and outcome NOT unknown: still skipped, no DingConnect calls", async () => {
-    const tx = makeStuckTx({ metadata: {} });
+  it("no provider id and outcome marker present with another value: still skipped, no DingConnect calls", async () => {
+    // Round-2 fixture adjustment: this case originally used
+    // metadata: {} (marker ABSENT) to mean "not unknown". Absent is
+    // now the legacy shape — records whose stamp was dropped by the
+    // strict schema before transferOutcome was declared — and legacy
+    // records DO enter recovery (see
+    // transaction-metadata-recovery.test.ts). "Not unknown" is
+    // therefore encoded as a marker present with a settled value.
+    const tx = makeStuckTx({
+      metadata: { transferOutcome: "completed" },
+    });
 
     const result = await settleStuckTransfer(tx);
 

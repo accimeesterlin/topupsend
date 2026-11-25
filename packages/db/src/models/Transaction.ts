@@ -65,6 +65,39 @@ export interface ITransaction extends Document {
     // Payment gateway tokens
     pgpayToken?: string;
     pgpayOrderId?: string;
+    // PGPay verification bookkeeping (reconciliation sweep + webhook)
+    pgpayVerification?: Record<string, unknown>;
+    bindingFailure?: string;
+    lastVerificationError?: string;
+    lastWebhookCheck?: Date;
+    // Transfer outcome & provider recovery
+    transferOutcome?: string;
+    dingTransferId?: number;
+    dingStatus?: string;
+    dingconnectStatus?: string;
+    dingconnectErrorCode?: string;
+    dingconnectProcessingState?: string;
+    recoveredViaDistributorRef?: boolean;
+    // Send ran in DingConnect ValidateOnly mode (mirrors isTestMode)
+    testMode?: boolean;
+    // Manual (offline) payment recording + void bookkeeping
+    manualPayment?: Record<string, unknown>;
+    manualPaymentVoided?: Record<string, unknown>;
+    // Refund bookkeeping + refund-reversal trail
+    refundError?: string;
+    refundedAmount?: number;
+    refundCustomerId?: string;
+    refundSource?: string;
+    refundedBy?: string;
+    refundedAt?: string;
+    refundReversedAt?: string;
+    refundReversedAmount?: number;
+    refundReversalShortfall?: number;
+    refundReversalError?: string;
+    internalNote?: string;
+    // Admin retry bookkeeping
+    retriedBy?: string;
+    retriedAt?: string;
     // Partner API idempotency (POST /api/v1/partner/topups)
     idempotencyKey?: string;
     // Scheduled top-ups: the schedule that produced this transaction
@@ -233,6 +266,52 @@ const TransactionSchema = new Schema<ITransaction>(
       // Payment gateway tokens
       pgpayToken: String,
       pgpayOrderId: String,
+      // PGPay verification bookkeeping (reconciliation sweep + webhook):
+      // the last server-to-server verification payload, any binding
+      // failure it produced, and the most recent verification error /
+      // webhook re-check. Declared explicitly for the same strict-mode
+      // reason as idempotencyKey below — undeclared nested metadata
+      // paths are silently dropped on save.
+      pgpayVerification: Schema.Types.Mixed,
+      bindingFailure: String,
+      lastVerificationError: String,
+      lastWebhookCheck: Date,
+      // Transfer outcome & provider recovery: the marker every send
+      // path stamps when the SendTransfer outcome is unknown, plus the
+      // DingConnect ids/statuses recorded while polling or recovering
+      // the transfer by DistributorRef. transferOutcome in particular
+      // went undeclared when the recovery shipped, so the marker never
+      // persisted and the sweep's recovery query could never match.
+      transferOutcome: String,
+      dingTransferId: Number,
+      dingStatus: String,
+      dingconnectStatus: String,
+      dingconnectErrorCode: String,
+      dingconnectProcessingState: String,
+      recoveredViaDistributorRef: Boolean,
+      // Whether the send ran in DingConnect ValidateOnly mode
+      // (mirrors the top-level isTestMode flag; written at creation by
+      // the partner and scheduled send paths and read by list filters).
+      testMode: Boolean,
+      // Manual (offline) payment recording + void bookkeeping.
+      manualPayment: Schema.Types.Mixed,
+      manualPaymentVoided: Schema.Types.Mixed,
+      // Refund bookkeeping: what was credited, to whom, from which
+      // source, and the refund-reversal trail a later retry consumes.
+      refundError: String,
+      refundedAmount: Number,
+      refundCustomerId: String,
+      refundSource: String,
+      refundedBy: String,
+      refundedAt: String,
+      refundReversedAt: String,
+      refundReversedAmount: Number,
+      refundReversalShortfall: Number,
+      refundReversalError: String,
+      internalNote: String,
+      // Admin retry bookkeeping.
+      retriedBy: String,
+      retriedAt: String,
       // Partner API idempotency key (see payments/process for the
       // same field on PGPay checkouts; declared explicitly here so
       // Mongoose persists it — nested metadata paths drop undeclared
