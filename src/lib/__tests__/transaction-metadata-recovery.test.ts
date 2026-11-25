@@ -331,7 +331,7 @@ describe("Reconciliation sweep — legacy records without the marker", () => {
     // createdAt as immutable and strips it from its own updates),
     // the way a genuinely 25h-old record reads.
     await Transaction.collection.updateOne(
-      { _id: tx._id },
+      { _id: new mongoose.Types.ObjectId(String(tx._id)) },
       { $set: { createdAt: new Date(Date.now() - 25 * HOUR) } },
     );
     mockDing.listTransferRecords.mockResolvedValue([]);
