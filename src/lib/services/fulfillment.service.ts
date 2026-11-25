@@ -854,21 +854,39 @@ export type SettleStuckTransferResult =
  * bookkeeping runs (isolated). Failed → the payment is refunded.
  * Anything else → the order stays in "processing" for the next sweep.
  */
+/** True when the transaction carries a numeric DingConnect transfer id that GetTransferStatus can poll. */
+function hasUsableProviderTransferId(transaction: ITransaction): boolean {
+  if (!transaction.providerTransactionId) {
+    return false;
+  }
+  return Number.isFinite(Number(transaction.providerTransactionId));
+}
+
 export async function settleStuckTransfer(
   transaction: ITransaction,
 ): Promise<SettleStuckTransferResult> {
-  if (
-    transaction.status !== "processing" ||
-    !transaction.providerTransactionId
-  ) {
+  if (transaction.status !== "processing") {
+    return "skipped";
+  }
+
+  if (!hasUsableProviderTransferId(transaction)) {
+    // No provider transfer id to poll: the SendTransfer response never
+    // arrived (timeout / network / 5xx), so the transfer's outcome is
+    // unknown locally. The transfer can still be recovered through the
+    // DistributorRef it was submitted with — without that recovery the
+    // transaction would stay "processing" forever, because every settle
+    // path keys off the provider id.
+    if (
+      (transaction.metadata as Record<string, unknown>)?.transferOutcome ===
+      "unknown"
+    ) {
+      return recoverUnknownTransferOutcome(transaction);
+    }
+    // Non-numeric ids (e.g. TEST-...) are not provider transfers.
     return "skipped";
   }
 
   const transferId = Number(transaction.providerTransactionId);
-  if (!Number.isFinite(transferId)) {
-    // Non-numeric ids (e.g. TEST-...) are not provider transfers.
-    return "skipped";
-  }
 
   const integration = await Integration.findOne({
     orgId: transaction.orgId,
@@ -968,5 +986,148 @@ export async function settleStuckTransfer(
   (transaction.metadata as Record<string, unknown>).dingconnectStatus =
     finalResult.Status;
   await transaction.save();
+  return "unknown";
+}
+
+/**
+ * Age after which an unknown-outcome send with no trace at the provider
+ * is abandoned as failed. Mirrors ABANDON_AFTER_MS in
+ * reconciliation.service.ts; DingConnect retains transfer records for
+ * ~2 months, so a full day with no record is conclusive, not a race.
+ */
+const UNKNOWN_OUTCOME_ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Recover a transaction stuck in "processing" whose SendTransfer
+ * outcome is unknown AND which carries no provider transfer id (the
+ * send's response was lost to a timeout / network error / 5xx, so the
+ * id was never recorded). Polling GetTransferStatus is impossible
+ * without the id, which is why these transactions previously stayed
+ * "processing" forever.
+ *
+ * Every SendTransfer is submitted with DistributorRef = the
+ * transaction's orderId, and DingConnect's ListTransferRecords can find
+ * the transfer by that reference (their prescribed timeout recovery):
+ *
+ * - Record found → stamp providerTransactionId / metadata.dingTransferId
+ *   and settle through the ordinary settleStuckTransfer poll path, with
+ *   all of its existing terminal handling (completion side effects;
+ *   partner/scheduled failures record "failed", never processRefund).
+ * - No record, partner-shaped, older than 24h → the send definitively
+ *   never reached the provider; record "failed" so the partner's own
+ *   sweep can refund its customer. NEVER processRefund: partner and
+ *   scheduled sends have no TopUpSend customer payment to refund.
+ * - No record, young (or a customer transaction, whose abandonment
+ *   refund policy is not decided here) → stays "processing" and the
+ *   result is "unknown" so the next sweep/read retries.
+ */
+export async function recoverUnknownTransferOutcome(
+  transaction: ITransaction,
+  now: Date = new Date(),
+): Promise<SettleStuckTransferResult> {
+  const metadata = transaction.metadata as Record<string, unknown>;
+
+  if (
+    transaction.status !== "processing" ||
+    metadata?.transferOutcome !== "unknown" ||
+    hasUsableProviderTransferId(transaction)
+  ) {
+    return "skipped";
+  }
+
+  const integration = await Integration.findOne({
+    orgId: transaction.orgId,
+    provider: "dingconnect",
+    status: "active",
+  }).select("+credentials.apiKey");
+
+  if (!integration?.credentials?.apiKey) {
+    logger.warn(
+      "Cannot recover unknown transfer outcome - no DingConnect integration",
+      { orderId: transaction.orderId },
+    );
+    return "skipped";
+  }
+
+  const dingConnect = createDingConnectService({
+    apiKey: integration.credentials.apiKey as string,
+  });
+
+  let records;
+  try {
+    records = await dingConnect.listTransferRecords({
+      distributorRef: transaction.orderId,
+      take: 10,
+    });
+  } catch (error) {
+    // A failed lookup proves nothing about the transfer; retry later.
+    logger.warn("Failed to list transfer records for outcome recovery", {
+      orderId: transaction.orderId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return "unknown";
+  }
+
+  const match = (records || []).find(
+    (item) =>
+      item?.TransferRecord?.TransferId?.DistributorRef === transaction.orderId,
+  );
+
+  if (match) {
+    const transferRef = match.TransferRecord.TransferId?.TransferRef;
+    if (!Number.isFinite(Number(transferRef))) {
+      logger.warn("Transfer record found but TransferRef is not numeric", {
+        orderId: transaction.orderId,
+        transferRef,
+      });
+      return "unknown";
+    }
+
+    // Stamp the provider id the lost SendTransfer response carried,
+    // then settle exactly as the ordinary poll path does.
+    transaction.providerTransactionId = String(transferRef);
+    (transaction.metadata as Record<string, unknown>).dingTransferId =
+      Number(transferRef);
+    (transaction.metadata as Record<string, unknown>).recoveredViaDistributorRef =
+      true;
+    (
+      transaction.metadata as Record<string, unknown>
+    ).dingconnectProcessingState = match.TransferRecord.ProcessingState;
+    await transaction.save();
+
+    logger.info("Recovered DingConnect transfer id by DistributorRef", {
+      orderId: transaction.orderId,
+      transferId: transferRef,
+      processingState: match.TransferRecord.ProcessingState,
+    });
+
+    return settleStuckTransfer(transaction);
+  }
+
+  // No transfer exists at DingConnect under this order's DistributorRef.
+  const isPartnerShaped =
+    (transaction as { paymentGateway?: string }).paymentGateway ===
+      "partner" || Boolean(metadata?.scheduledTopupId);
+  const createdAtMs = transaction.createdAt
+    ? new Date(transaction.createdAt).getTime()
+    : NaN;
+  const ageMs = Number.isFinite(createdAtMs) ? now.getTime() - createdAtMs : 0;
+
+  if (isPartnerShaped && ageMs > UNKNOWN_OUTCOME_ABANDON_AFTER_MS) {
+    transaction.status = "failed";
+    transaction.timeline.failedAt = new Date();
+    transaction.metadata.failureReason =
+      "No transfer found at DingConnect for this order's DistributorRef after 24 hours; the send never reached the provider";
+    (transaction.metadata as Record<string, unknown>).transferOutcome =
+      "not-found";
+    await transaction.save();
+
+    logger.error(
+      "Unknown-outcome transfer abandoned: no provider record after 24h",
+      { orderId: transaction.orderId, ageMs },
+    );
+    return "failed";
+  }
+
   return "unknown";
 }

@@ -7,7 +7,11 @@
  * anything else is a 404. If the transaction is still "processing",
  * the existing live-settle path (settleStuckTransfer, which polls
  * DingConnect's GetTransferStatus) runs before answering, so the
- * partner sees the freshest known status.
+ * partner sees the freshest known status. When the transaction's
+ * SendTransfer outcome is unknown and no provider transfer id was ever
+ * recorded, settleStuckTransfer first recovers the transfer by its
+ * DistributorRef (ListTransferRecords), so this read can heal records
+ * that polling alone could never settle.
  */
 
 import { NextRequest } from "next/server";
