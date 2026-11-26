@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRevalidatedSession } from '@/lib/auth';
 import { dbConnection } from '@topupsend/db/connection';
-// Import via the package index (not the model file directly) so
-// the enriched Organization schema — the one that defines `logo` —
-// is the registered Org model this route reads and writes.
-import { Org } from '@topupsend/db';
+// The registered Org model is the enriched Organization schema
+// (which defines `logo`): packages/db/src/index.ts loads it before
+// this legacy model file, and both share the one "Org" model — see
+// the comment there. `logo` is therefore read/written via the doc.
+import { Org } from '@topupsend/db/models/org.model';
 import { hasPermission } from '@/lib/permissions';
 import { Permission } from '@topupsend/types';
 import { validateOrgLogo } from '@/lib/org-logo';
