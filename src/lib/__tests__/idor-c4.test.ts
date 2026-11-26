@@ -521,8 +521,12 @@ describe("customers/[id] PUT — password changes (F-M3)", () => {
 
     expect(res.status).toBe(200);
     expect(mockCustomerUpdateOne).toHaveBeenCalledTimes(1);
+    // The write also bumps tokenVersion ($inc) so a password set
+    // revokes portal sessions issued before it — deliberate
+    // behavior added with the customer-portal login fix.
     expect(mockCustomerUpdateOne.mock.calls[0][1]).toEqual({
       $set: { passwordHash: "hashed:newpass123" },
+      $inc: { tokenVersion: 1 },
     });
   });
 
@@ -554,8 +558,11 @@ describe("customers/[id] PUT — password changes (F-M3)", () => {
 
     expect(res.status).toBe(200);
     expect(mockCustomerUpdateOne).toHaveBeenCalledTimes(1);
+    // Same deliberate tokenVersion bump as the self-service pin
+    // above: a staff-set password takes effect immediately.
     expect(mockCustomerUpdateOne.mock.calls[0][1]).toEqual({
       $set: { passwordHash: "hashed:adminset123" },
+      $inc: { tokenVersion: 1 },
     });
   });
 });

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Save, Globe, Mail, Phone } from 'lucide-react';
+import { ArrowLeft, Building2, Save, Globe, Mail, Phone, Image as ImageIcon, Trash2, Upload } from 'lucide-react';
 import {
   Button,
   Card,
@@ -12,10 +12,12 @@ import {
   CardDescription,
 } from '@topupsend/ui';
 import { DashboardLayout } from '@/components/dashboard-layout';
+import { ORG_LOGO_ACCEPT, ORG_LOGO_MAX_BYTES, validateOrgLogo } from '@/lib/org-logo';
 
 interface Organization {
   _id: string;
   name: string;
+  logo?: string | null;
   email?: string;
   phone?: string;
   website?: string;
@@ -51,6 +53,10 @@ export default function OrganizationSettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoSaving, setLogoSaving] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchOrganization();
@@ -62,6 +68,7 @@ export default function OrganizationSettingsPage() {
       if (response.ok) {
         const data = await response.json();
         setOrganization(data);
+        setLogo(data.logo ?? null);
         setFormData({
           name: data.name || '',
           email: data.email || '',
@@ -125,6 +132,60 @@ export default function OrganizationSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveLogo = async (value: string | null) => {
+    const validation = validateOrgLogo(value);
+    if (!validation.ok) {
+      setMessage({ type: 'error', text: validation.error });
+      return;
+    }
+    setLogoSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/v1/organization', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logo: validation.value }),
+      });
+      if (response.ok) {
+        setLogo(validation.value);
+        setLogoUrl('');
+        setMessage({
+          type: 'success',
+          text: validation.value
+            ? 'Business logo saved. It now appears in your dashboard and customer portal.'
+            : 'Business logo removed.',
+        });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        const error = await response.json();
+        setMessage({ type: 'error', text: error.error || 'Failed to save logo' });
+      }
+    } catch (_error) {
+      setMessage({ type: 'error', text: 'Failed to save logo' });
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
+  const handleLogoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > ORG_LOGO_MAX_BYTES) {
+      setMessage({
+        type: 'error',
+        text: `Logo image is too large. Maximum size is ${Math.round(ORG_LOGO_MAX_BYTES / 1024)} KB.`,
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        void saveLogo(reader.result);
+      }
+    };
+    reader.onerror = () => setMessage({ type: 'error', text: 'Could not read that image file.' });
+    reader.readAsDataURL(file);
   };
 
   if (loading) {
@@ -235,6 +296,99 @@ export default function OrganizationSettingsPage() {
                   value={formData.website}
                   onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                 />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Business Logo */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <ImageIcon className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Business Logo</CardTitle>
+                <CardDescription>
+                  Shown in your dashboard and in the customer portal your customers use
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-16 min-w-16 px-2 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
+                {logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logo} alt={formData.name || 'Organization logo'} className="max-h-14 max-w-40 object-contain" />
+                ) : (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Building2 className="h-6 w-6" />
+                    <span className="text-sm font-medium">{formData.name || 'Your business'}</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {logo
+                  ? 'This is how your logo appears to customers.'
+                  : 'No logo set. The portal and dashboard use the default branding.'}
+              </div>
+            </div>
+
+            <input
+              ref={logoFileRef}
+              type="file"
+              accept={ORG_LOGO_ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                handleLogoFile(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={logoSaving}
+                onClick={() => logoFileRef.current?.click()}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                {logo ? 'Replace logo' : 'Upload logo'}
+              </Button>
+              {logo && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={logoSaving}
+                  onClick={() => void saveLogo(null)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove logo
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground">
+                PNG, JPG, WebP, or SVG, up to {Math.round(ORG_LOGO_MAX_BYTES / 1024)} KB
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Or use an image URL</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://example.com/logo.png"
+                  className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  disabled={logoSaving || !logoUrl.trim()}
+                  onClick={() => void saveLogo(logoUrl.trim())}
+                >
+                  Use URL
+                </Button>
               </div>
             </div>
           </CardContent>

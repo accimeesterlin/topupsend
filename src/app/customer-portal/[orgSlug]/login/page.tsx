@@ -43,7 +43,7 @@ export default function CustomerLoginPage({
       const res = await fetch("/api/v1/customer-auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, orgSlug }),
+        body: JSON.stringify({ identifier: email, password, orgSlug }),
       });
 
       const text = await res.text();
@@ -92,15 +92,15 @@ export default function CustomerLoginPage({
 
           <div className="space-y-2">
             <Label htmlFor="email">
-              {t("customer.login.email")}
+              {t("customer.login.identifier")}
             </Label>
             <Input
               id="email"
-              type="email"
+              type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={t("customer.login.emailPlaceholder")}
+              placeholder={t("customer.login.identifierPlaceholder")}
             />
           </div>
 

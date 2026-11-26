@@ -181,12 +181,35 @@ export default function CustomerPortalLayout({
 }) {
   const [orgSlug, setOrgSlug] = useState<string>("");
   const [customer, setCustomer] = useState<CustomerData | null>(null);
+  const [branding, setBranding] = useState<{
+    name: string;
+    logo: string | null;
+  } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
     params.then((p) => setOrgSlug(p.orgSlug));
   }, [params]);
+
+  // Public branding for THIS portal's org (resolved by the same
+  // slug that routes the portal): the org's business logo when one
+  // is set, default branding otherwise.
+  useEffect(() => {
+    if (!orgSlug) return;
+    fetch(
+      `/api/v1/customer-portal/branding?orgSlug=${encodeURIComponent(orgSlug)}`,
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.name) {
+          setBranding({ name: data.name, logo: data.logo ?? null });
+        }
+      })
+      .catch(() => {
+        // Branding is decorative; the default header renders.
+      });
+  }, [orgSlug]);
 
   // Fetch customer data for authenticated pages
   useEffect(() => {
@@ -228,9 +251,25 @@ export default function CustomerPortalLayout({
               <div className="flex items-center">
                 <Link
                   href={`/customer-portal/${orgSlug}`}
-                  className="text-2xl font-bold text-primary"
+                  className="flex items-center gap-3"
                 >
-                  Customer Portal
+                  {branding?.logo ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={branding.logo}
+                        alt={branding.name}
+                        className="h-10 max-w-44 object-contain"
+                      />
+                      <span className="text-xl font-bold text-primary">
+                        {branding.name}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-2xl font-bold text-primary">
+                      Customer Portal
+                    </span>
+                  )}
                 </Link>
               </div>
               <div className="flex items-center gap-4">
