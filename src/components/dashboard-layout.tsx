@@ -96,9 +96,10 @@ const navigation = navigationSections.flatMap((section) => section.items);
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [_organization, setOrganization] = useState<{ name: string } | null>(
-    null,
-  );
+  const [organization, setOrganization] = useState<{
+    name: string;
+    logo?: string | null;
+  } | null>(null);
   const [user, setUser] = useState<{ email: string; roles: string[] } | null>(
     null,
   );
@@ -165,13 +166,36 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center gap-3 border-b px-6">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <CreditCard className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div className="flex-1">
-              <h1 className="text-sm font-bold">TopUpSend</h1>
-              <p className="text-xs text-muted-foreground">Seller Platform</p>
-            </div>
+            {organization?.logo ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={organization.logo}
+                  alt={organization.name}
+                  className="h-8 max-w-24 object-contain"
+                />
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-sm font-bold truncate">
+                    {organization.name}
+                  </h1>
+                  <p className="text-xs text-muted-foreground">
+                    Seller Platform
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div className="flex-1">
+                  <h1 className="text-sm font-bold">TopUpSend</h1>
+                  <p className="text-xs text-muted-foreground">
+                    Seller Platform
+                  </p>
+                </div>
+              </>
+            )}
             <Button
               variant="ghost"
               size="sm"
