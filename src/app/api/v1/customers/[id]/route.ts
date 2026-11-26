@@ -268,10 +268,23 @@ export async function PUT(
     // Mongoose may not properly persist fields loaded with select:false
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 12);
-      await Customer.updateOne(
+      const result = await Customer.updateOne(
         { _id: id },
-        { $set: { passwordHash: hashedPassword } },
+        {
+          $set: { passwordHash: hashedPassword },
+          // A password set must take effect immediately: bump the
+          // token version so portal sessions issued before the set
+          // stop revalidating — the same revocation the dedicated
+          // /password route and the reset route already perform.
+          $inc: { tokenVersion: 1 },
+        },
       );
+      if (result.matchedCount === 0) {
+        return NextResponse.json(
+          { error: "Failed to update customer" },
+          { status: 500 },
+        );
+      }
       console.log("[Customer Update] Password saved via direct update:", {
         customerId: id,
         email: customer.email,

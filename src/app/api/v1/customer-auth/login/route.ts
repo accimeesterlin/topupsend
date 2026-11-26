@@ -25,10 +25,35 @@ import {
 } from "@/lib/two-factor";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  // The login identifier is the customer's email OR phone number.
+  // TopUpSend customers are phone-first: staff create requires only
+  // a phone number (email is optional) and fulfillment auto-creates
+  // customer records keyed by phone, so an email-only login left
+  // every phone-only customer unable to use a password at all —
+  // including one staff had just set for them in the dashboard.
+  // `identifier` is the current field; `email` is still accepted
+  // for older clients.
+  identifier: z.string().min(1, "Email or phone number is required").optional(),
+  email: z.string().min(1, "Email or phone number is required").optional(),
   password: z.string().min(1, "Password is required"),
   orgSlug: z.string().min(1, "Organization slug is required"),
 });
+
+/**
+ * Phone lookup candidates for an identifier typed by a customer:
+ * the value as typed, with spaces/dashes removed, digits only, and
+ * "+" + digits — matched against the org's stored phone numbers
+ * (primary and additional). Org-scoped, like every other lookup in
+ * this route.
+ */
+function phoneCandidates(identifier: string): string[] {
+  const trimmed = identifier.trim();
+  const compact = trimmed.replace(/[\s()-]/g, "");
+  const digits = trimmed.replace(/\D/g, "");
+  return Array.from(
+    new Set([trimmed, compact, digits, digits ? `+${digits}` : ""]),
+  ).filter(Boolean);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,10 +62,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = loginSchema.parse(body);
 
+    const identifier = (data.identifier ?? data.email ?? "").trim();
+    if (!identifier) {
+      throw ApiErrors.BadRequest("Email or phone number is required");
+    }
+    const isEmailIdentifier = identifier.includes("@");
+
     // Rate limit credential attempts per account + IP (F-M6)
     const rateLimit = await checkAuthRateLimit(
       "login",
-      `${data.orgSlug.toLowerCase()}:${data.email.toLowerCase()}`,
+      `${data.orgSlug.toLowerCase()}:${identifier.toLowerCase()}`,
       getClientIp(request),
     );
     if (!rateLimit.allowed) {
@@ -59,15 +90,26 @@ export async function POST(request: NextRequest) {
       throw ApiErrors.Unauthorized("Invalid credentials");
     }
 
-    // Find customer with password hash
-    const customer = await Customer.findOne({
-      email: data.email.toLowerCase(),
-      orgId: org._id.toString(),
-    }).select("+passwordHash");
+    // Find customer with password hash — by email when the
+    // identifier is an email address, otherwise by phone number
+    // within this org (the same identifier semantics as the
+    // Customer model's findByOrgAndIdentifier).
+    const customer = isEmailIdentifier
+      ? await Customer.findOne({
+          email: identifier.toLowerCase(),
+          orgId: org._id.toString(),
+        }).select("+passwordHash")
+      : await Customer.findOne({
+          orgId: org._id.toString(),
+          $or: [
+            { phoneNumber: { $in: phoneCandidates(identifier) } },
+            { additionalPhoneNumbers: { $in: phoneCandidates(identifier) } },
+          ],
+        }).select("+passwordHash");
 
     if (!customer) {
       logger.warn("Customer login failed: customer not found", {
-        email: data.email.toLowerCase(),
+        identifier: identifier.toLowerCase(),
         orgId: org._id.toString(),
         orgSlug: data.orgSlug,
       });
@@ -77,7 +119,7 @@ export async function POST(request: NextRequest) {
     if (!customer.passwordHash) {
       logger.warn("Customer login failed: no password set", {
         customerId: String(customer._id),
-        email: data.email.toLowerCase(),
+        identifier: identifier.toLowerCase(),
       });
       throw ApiErrors.Unauthorized("Invalid credentials");
     }
@@ -88,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (!isValid) {
       logger.warn("Customer login failed: invalid password", {
         customerId: String(customer._id),
-        email: data.email.toLowerCase(),
+        identifier: identifier.toLowerCase(),
       });
       throw ApiErrors.Unauthorized("Invalid credentials");
     }
@@ -143,7 +185,10 @@ export async function POST(request: NextRequest) {
     const token = await createCustomerSession({
       customerId: String(customer._id),
       orgId: String(org._id),
-      email: customer.email!,
+      // Phone-only customers have no email on the record; the
+      // session carries an empty email claim and the portal falls
+      // back to the phone number for display.
+      email: customer.email ?? "",
       emailVerified: customer.emailVerified,
       name: customer.name,
       tv: customer.tokenVersion ?? 0,
